@@ -1,0 +1,42 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "driftpilot"
+dynamic = ["version"]
+description = "Detect, triage and fix Terraform infrastructure drift."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "Shrey Tiwari" }]
+dependencies = [
+    "typer>=0.12",
+    "rich>=13",
+    "pydantic>=2.7",
+    "pyyaml>=6",
+    "PyGithub>=2.3",
+    "docker>=7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+driftpilot = "driftpilot.cli:app"
+
+[tool.hatch.version]
+path = "driftpilot/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["driftpilot"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
