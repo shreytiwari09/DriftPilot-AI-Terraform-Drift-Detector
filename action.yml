@@ -32,8 +32,14 @@ inputs:
     description: Repo config file
     default: .driftpilot.yml
   history-branch:
-    description: Branch where drift history is stored (used from v0.3)
+    description: Branch where drift history is stored; empty to disable history
     default: driftpilot-data
+  dashboard-repo:
+    description: Public repo (owner/name) with GitHub Pages to publish the dashboard to; empty = off
+    default: ""
+  dashboard-token:
+    description: Token that can write to dashboard-repo (the workflow token can't write other repos)
+    default: ""
 
 outputs:
   drift-found:
@@ -74,5 +80,8 @@ runs:
         DRIFTPILOT_LLM_MODEL: ${{ inputs.llm-model }}
         DRIFTPILOT_LLM_API_KEY: ${{ inputs.llm-api-key }}
         DRIFTPILOT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        DRIFTPILOT_HISTORY_BRANCH: ${{ inputs.history-branch }}
+        DRIFTPILOT_DASHBOARD_REPO: ${{ inputs.dashboard-repo }}
+        DRIFTPILOT_DASHBOARD_TOKEN: ${{ inputs.dashboard-token }}
         GITHUB_TOKEN: ${{ inputs.provider-token }}
       run: driftpilot action

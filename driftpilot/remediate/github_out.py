@@ -199,6 +199,18 @@ class GitHubOutput:
             title=title, body=body, labels=self._labels(item, patch)
         ).html_url
 
+    def alert(self, key: str, title: str, body: str) -> str:
+        """A de-duplicated issue that isn't about one resource, e.g. the verdict monitor."""
+        self._ensure_labels()
+        full = f"{marker(key)}\n{body}"
+        if self.run_url:
+            full += f"\n\n_Opened by DriftPilot ([run]({self.run_url}))._"
+        existing = self._find_open(key)
+        if existing is not None:
+            existing.edit(body=full)
+            return existing.html_url
+        return self.repo.create_issue(title=title, body=full, labels=["driftpilot"]).html_url
+
     def pull_request(self, item: Item, patch: Patch) -> str:
         self._ensure_labels()
         branch = f"driftpilot/{item.plan.action}-{_slug(item.plan.address)}"

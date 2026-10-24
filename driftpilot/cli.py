@@ -1,5 +1,6 @@
-"""Command-line interface: `driftpilot scan | fix | action | version`."""
+"""Command-line interface: `driftpilot scan | fix | report | action | version`."""
 
+import json
 import os
 from pathlib import Path
 from typing import Annotated
@@ -79,16 +80,60 @@ def scan(
     fail_on_drift: Annotated[
         bool, typer.Option(help="Exit with code 2 if real drift or unmanaged resources are found.")
     ] = False,
+    history: Annotated[
+        Path | None, typer.Option(help="Append this scan to a local history folder.")
+    ] = None,
 ) -> None:
     """Check a Terraform directory for drift and unmanaged resources."""
     cfg = _load(directory, config)
     result = _scan_or_exit(directory, cfg, use_llm, plan_json, state_json)
+    if history is not None:
+        from driftpilot.history.store import LocalStore, append_scan
+
+        append_scan(LocalStore(history), result)
     if json_output:
         print(result.model_dump_json(indent=2))
     else:
         print_result(result, console, show_noise)
     if fail_on_drift and (result.real_findings or result.unmanaged):
         raise typer.Exit(2)
+
+
+@app.command()
+def report(
+    history: Annotated[Path, typer.Option(help="History folder (drift-events.jsonl, runs.jsonl).")],
+    html: Annotated[
+        Path | None, typer.Option(help="Also write the dashboard to <folder>/index.html.")
+    ] = None,
+    json_output: Annotated[bool, typer.Option("--json", help="Machine-readable output.")] = False,
+    note: Annotated[str | None, typer.Option(help="Banner text on the dashboard.")] = None,
+) -> None:
+    """Analyze drift history: recurring drift, anomalies, shifts, health, verdict monitor."""
+    from driftpilot.history.analytics import analyze, episodes_frame
+    from driftpilot.history.store import LocalStore
+    from driftpilot.history.verdict_monitor import monitor
+    from driftpilot.report.console import print_history
+    from driftpilot.report.dashboard import build_dashboard
+
+    store = LocalStore(history)
+    events, runs = store.load_events(), store.load_runs()
+    analytics = analyze(events, runs)
+    episodes = episodes_frame(events, runs)
+    mon = (
+        monitor(episodes, analytics.period_end) if analytics.period_end else monitor(episodes, None)
+    )
+    if json_output:
+        print(
+            json.dumps(
+                {"analytics": analytics.model_dump(mode="json"), "monitor": mon.model_dump()}
+            )
+        )
+    else:
+        print_history(analytics, mon, console)
+    if html is not None:
+        html.mkdir(parents=True, exist_ok=True)
+        (html / "index.html").write_text(build_dashboard(analytics, mon, episodes, note=note))
+        console.print(f"[green]Dashboard written to {html / 'index.html'}[/]")
 
 
 @app.command()
@@ -132,6 +177,36 @@ def _github_output(repo_name: str, token: str):
     return GitHubOutput(repo, repo.default_branch, run_url)
 
 
+def _learn_and_publish(result: ScanResult, output, branch: str) -> str:
+    """Record history, update outcomes, monitor, publish the dashboard; return summary markdown."""
+    from driftpilot.history.learn import dashboard_html, learn, publish_dashboard
+    from driftpilot.history.store import GitHubBranchStore
+
+    learned = learn(GitHubBranchStore(output.repo, branch), result, output.repo, output)
+    h = learned.analytics.health
+    lines = [
+        "",
+        "### History",
+        "",
+        f"{h.runs} runs recorded on `{branch}` · {learned.analytics.episodes} drift episodes · "
+        f"{h.pct_runs_zero_drift}% runs clean · "
+        f"{learned.outcomes_updated} human outcome(s) updated.",
+    ]
+    for alert in learned.monitor.alerts:
+        lines.append(f"- ⚠️ {alert}")
+    if learned.alert_url:
+        lines.append(f"- Review issue: {learned.alert_url}")
+    dashboard_repo = os.environ.get("DRIFTPILOT_DASHBOARD_REPO")
+    dashboard_token = os.environ.get("DRIFTPILOT_DASHBOARD_TOKEN")
+    if dashboard_repo and dashboard_token:
+        page = dashboard_html(learned, f"DriftPilot — {output.repo.full_name}")
+        url = publish_dashboard(
+            page, dashboard_repo, dashboard_token, f"Update dashboard ({result.run_id})"
+        )
+        lines.append(f"- Dashboard: {url}")
+    return "\n".join(lines) + "\n"
+
+
 @app.command()
 def action(
     working_directory: Annotated[
@@ -152,6 +227,7 @@ def action(
 
     token = os.environ.get("DRIFTPILOT_GITHUB_TOKEN")
     repo_name = os.environ.get("GITHUB_REPOSITORY")
+    output = None
     if token and repo_name:
         try:
             output = _github_output(repo_name, token)
@@ -161,9 +237,16 @@ def action(
         except Exception as e:
             result.errors.append(f"remediation: {e}")
 
+    history_md = ""
+    if output is not None and (branch := os.environ.get("DRIFTPILOT_HISTORY_BRANCH")):
+        try:
+            history_md = _learn_and_publish(result, output, branch)
+        except Exception as e:  # learning must never hide this run's drift report
+            result.errors.append(f"history: {e}")
+
     # CI logs have no terminal, so rich would assume 80 columns and wrap every cell.
     print_result(result, Console(width=200))
-    summary = build_summary(result)
+    summary = build_summary(result) + history_md
     if path := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(path, "a") as f:
             f.write(summary)
