@@ -47,9 +47,14 @@ def verify_patch(
     working_dir: Path,
     files: dict[str, str],
     expect: Literal["no_changes", "import_only"] = "no_changes",
+    targets: list[str] | None = None,
     timeout: int = DEFAULT_TIMEOUT,
 ) -> VerifyResult:
-    """Apply `files` (relative path → full content) to a temp copy and check the plan."""
+    """Apply `files` (relative path → full content) to a temp copy and check the plan.
+
+    `targets` limits the plan to the patched resources, so drift elsewhere in the same
+    directory can't make a correct patch look wrong.
+    """
     with tempfile.TemporaryDirectory(prefix="driftpilot-verify-") as tmp:
         work = Path(tmp) / "work"
         _copy_workdir(working_dir, work)
@@ -70,6 +75,7 @@ def verify_patch(
             "plan", "-detailed-exitcode", "-lock=false", "-input=false", "-no-color",
             "-out=verify.plan",
         ]  # fmt: skip
+        plan_args += [f"-target={t}" for t in targets or []]
         plan = run_terraform(plan_args, work, timeout)
         if plan.returncode == 1:
             return VerifyResult(False, "plan", (plan.stderr or plan.stdout).strip())

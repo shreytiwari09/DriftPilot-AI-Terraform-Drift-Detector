@@ -44,6 +44,13 @@ def test_zero_change_plan_is_verified_and_original_untouched(tmp_path: Path) -> 
     assert (d / "main.tf").read_text() == 'resource "x" "a" {}\n'
 
 
+def test_targets_limit_the_plan(tmp_path: Path) -> None:
+    patcher, calls = run_with([proc(0), proc(0), proc(0, "No changes.")])
+    with patcher:
+        verify_patch(workdir(tmp_path), {"main.tf": "x"}, targets=["x.a"])
+    assert "-target=x.a" in calls[2][0]
+
+
 def test_plan_with_changes_is_not_verified(tmp_path: Path) -> None:
     patcher, _ = run_with([proc(0), proc(0), proc(2, "  ~ memory = 256 -> 512\nPlan: 0 to add")])
     with patcher:
