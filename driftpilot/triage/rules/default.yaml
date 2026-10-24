@@ -9,6 +9,11 @@
 
 version: 1
 
+# Attributes a normal `terraform apply` can't put back in place: reverting them needs
+# `terraform apply -replace=<address>` (found in Phase 0: Docker treats cpu_shares=0 as "unchanged").
+revert_with_replace:
+  - { type: docker_container, attribute: cpu_shares }
+
 rules:
   # ---------- Noise: not real drift ----------
   - id: noise-provider-defaults

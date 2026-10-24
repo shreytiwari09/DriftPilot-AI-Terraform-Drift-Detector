@@ -142,12 +142,25 @@ def _predicate(when: str | dict[str, Any] | None) -> tuple[Predicate | None, Any
     return PREDICATES[name], arg
 
 
-def load_rules(path: Path | None = None) -> list[Rule]:
+def _rule_pack(path: Path | None) -> dict[str, Any]:
     if path is None:
         text = resources.files("driftpilot.triage").joinpath("rules/default.yaml").read_text()
     else:
         text = path.read_text()
-    rules = [Rule.model_validate(r) for r in yaml.safe_load(text)["rules"]]
+    return yaml.safe_load(text)
+
+
+def needs_replace_to_revert(finding: DriftFinding, path: Path | None = None) -> bool:
+    """True if reverting this attribute needs `apply -replace` rather than `-target`."""
+    return any(
+        glob_match(entry.get("type", "*"), finding.resource_type)
+        and glob_match(entry.get("attribute", "*"), finding.attribute_path or "")
+        for entry in _rule_pack(path).get("revert_with_replace", [])
+    )
+
+
+def load_rules(path: Path | None = None) -> list[Rule]:
+    rules = [Rule.model_validate(r) for r in _rule_pack(path)["rules"]]
     for rule in rules:
         _predicate(rule.when)  # fail fast on typos
     return rules
