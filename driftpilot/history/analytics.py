@@ -74,7 +74,7 @@ def episodes_frame(events: list[HistoryEvent], runs: list[RunRecord]) -> pd.Data
     """One row per episode: when it started/ended, what it was, and how it was judged."""
     columns = [
         "finding_id", "address", "attribute", "start", "end", "runs_seen",
-        "severity", "category", "outcome", "resolved",
+        "severity", "category", "action", "source", "outcome", "resolved",
     ]  # fmt: skip
     drift = [e for e in events if isinstance(e.finding, DriftFinding)]
     if not drift or not runs:
@@ -115,6 +115,8 @@ def _episode_row(fid: str, group: list[HistoryEvent], order: dict, last_run: int
         "runs_seen": len(group),
         "severity": first.verdict.severity,
         "category": first.verdict.category,
+        "action": first.verdict.recommended_action,
+        "source": first.verdict.source,
         "outcome": outcomes.pop() if len(outcomes) == 1 else "pending",
         "resolved": order[last.run_id] < last_run,
     }
