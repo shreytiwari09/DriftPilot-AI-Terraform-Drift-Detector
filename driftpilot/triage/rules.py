@@ -47,6 +47,10 @@ def _glob(pattern: str) -> re.Pattern[str]:
     return re.compile(".*".join(re.escape(part) for part in pattern.split("*")) + r"\Z")
 
 
+def glob_match(pattern: str, text: str) -> bool:
+    return bool(_glob(pattern).match(text))
+
+
 def _is_zero_value(value: Any) -> bool:
     """Empty/zero defaults a provider fills in: [], {}, "", 0, False."""
     return value is not None and not value and isinstance(value, list | dict | str | int | float)
