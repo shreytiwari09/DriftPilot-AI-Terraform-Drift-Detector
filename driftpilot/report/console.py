@@ -4,7 +4,7 @@ from rich.console import Console
 from rich.table import Table
 
 from driftpilot.models import ScanResult
-from driftpilot.report import change_text, counts, severity_of, sorted_findings
+from driftpilot.report import change_text, counts, decided_by, severity_of, sorted_findings
 
 _STYLE = {
     "critical": "bold red",
@@ -21,7 +21,7 @@ def print_result(result: ScanResult, console: Console, show_noise: bool = False)
     c = counts(result)
     if findings:
         table = Table(title="Drift", title_justify="left")
-        for column in ("Severity", "Resource", "Setting", "Change", "Why"):
+        for column in ("Severity", "Resource", "Setting", "Change", "Action", "Why"):
             table.add_column(column, overflow="fold")
         for f in findings:
             v = result.verdicts.get(f.id)
@@ -32,7 +32,8 @@ def print_result(result: ScanResult, console: Console, show_noise: bool = False)
                 f.address,
                 f.attribute_path or "—",
                 change_text(f),
-                f"{v.reason} [dim]({v.rule_id})[/]" if v else "[dim]no rule matched[/]",
+                v.recommended_action if v else "—",
+                f"{v.reason} [dim]({decided_by(v)})[/]" if v else f"[dim]{decided_by(v)}[/]",
             )
         console.print(table)
 

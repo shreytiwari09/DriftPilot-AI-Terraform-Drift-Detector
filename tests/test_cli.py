@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from typer.testing import CliRunner
 
@@ -22,7 +22,7 @@ def test_scan_reports_critical_from_recorded_plan() -> None:
 def test_scan_json_output_hides_nothing() -> None:
     plan = FIXTURES / "docker/noise_mac_address_after_restart.json"
     result = runner.invoke(app, ["scan", "--plan-json", str(plan), "--json"])
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["findings"]
     assert all(not v["is_real_drift"] for v in data["verdicts"].values())
 
@@ -87,3 +87,63 @@ def test_action_writes_summary_and_outputs(tmp_path: Path, monkeypatch) -> None:
     assert "drift-found=true" in outputs.read_text()
     assert "critical-count=1" in outputs.read_text()
     assert "::error title=DriftPilot::1 critical" in result.output
+
+
+LLM_ANSWER = json.dumps(
+    {
+        "verdicts": [
+            {
+                "attribute_path": path,
+                "is_real_drift": True,
+                "severity": "medium",
+                "category": "availability",
+                "intent": "likely_hotfix",
+                "recommended_action": "codify",
+                "confidence": 0.9,
+                "reason": "Memory was raised by hand during an incident.",
+            }
+            for path in ("memory", "memory_swap")
+        ]
+    }
+)
+
+
+def test_scan_uses_llm_for_undecided_findings() -> None:
+    from driftpilot.triage.llm import FakeLLM
+
+    fake = FakeLLM([LLM_ANSWER])
+    plan = FIXTURES / "docker/s11_memory_changed.json"
+    with patch("driftpilot.cli.build_llm", return_value=fake):
+        result = runner.invoke(app, ["scan", "--plan-json", str(plan)])
+    assert result.exit_code == 0, result.output
+    assert "codify" in result.output and "AI (triage-v2)" in result.output
+    assert len(fake.prompts) == 1
+
+
+def test_no_llm_flag_skips_triage() -> None:
+    plan = FIXTURES / "docker/s11_memory_changed.json"
+    with patch("driftpilot.cli.build_llm") as build:
+        result = runner.invoke(app, ["scan", "--plan-json", str(plan), "--no-llm"])
+    build.assert_not_called()
+    assert "needs triage" in result.output
+
+
+def test_action_opens_issue_for_critical(tmp_path: Path, monkeypatch) -> None:
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    monkeypatch.setenv("DRIFTPILOT_WORKING_DIRECTORY", str(tmp_path))
+    monkeypatch.setenv("DRIFTPILOT_GITHUB_TOKEN", "t")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "driftpilot-demo/infra")
+    plan = json.loads((FIXTURES / "github/s2_required_approvals_reduced.json").read_text())
+    output = MagicMock()
+    output.issue.return_value = "https://github.com/driftpilot-demo/infra/issues/7"
+    with (
+        patch("driftpilot.scan.terraform_init"),
+        patch("driftpilot.scan.refresh_only_plan", return_value=plan),
+        patch("driftpilot.cli._github_output", return_value=output),
+    ):
+        result = runner.invoke(app, ["action"])
+    assert result.exit_code == 0, result.output
+    item = output.issue.call_args.args[0]
+    assert (item.plan.action, item.plan.severity) == ("revert", "critical")
+    assert "issues/7" in summary.read_text() and "### Fixes" in summary.read_text()

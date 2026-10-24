@@ -77,10 +77,14 @@ def run_remediations(
 
 
 class ConsoleOutput:
-    """Prints what would be opened instead of calling GitHub (`driftpilot fix --dry-run`)."""
+    """Prints what would be opened instead of calling GitHub (`driftpilot fix`).
 
-    def __init__(self, console: Console) -> None:
+    With `write_to`, verified patches are also written into that directory (`--write`).
+    """
+
+    def __init__(self, console: Console, write_to: Path | None = None) -> None:
         self.console = console
+        self.write_to = write_to
 
     def issue(self, item: Item, patch: Patch | None = None) -> str:
         self.console.rule(f"[bold]Issue[/]: {item.plan.address} ({item.plan.action})")
@@ -93,4 +97,7 @@ class ConsoleOutput:
         for path, content in patch.files.items():
             self.console.rule(path)
             self.console.print(content, markup=False)
-        return "(dry run: pull request)"
+            if self.write_to is not None:
+                (self.write_to / path).write_text(content)
+                self.console.print(f"[green]wrote {self.write_to / path}[/]")
+        return "(dry run: pull request)" if self.write_to is None else "(written locally)"

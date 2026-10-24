@@ -94,6 +94,7 @@ class ScanResult(BaseModel):
     findings: list[DriftFinding] = []
     unmanaged: list[UnmanagedFinding] = []
     verdicts: dict[str, Verdict] = {}  # keyed by finding id; missing = needs triage
+    remediations: list[RemediationResult] = []
     errors: list[str] = []
 
     def verdict_for(self, finding_id: str) -> Verdict | None:

@@ -43,3 +43,14 @@ def change_text(f: DriftFinding) -> str:
     if f.change_kind == "deleted":
         return "deleted outside Terraform"
     return f"{short(f.before)} → {short(f.after)}"
+
+
+def decided_by(v: Verdict | None) -> str:
+    """Who made the call, e.g. "rule github-team-permission-admin" or "AI (triage-v2), 90%"."""
+    if v is None:
+        return "no rule matched; no LLM configured"
+    if v.source == "rule":
+        return f"rule {v.rule_id}"
+    if v.source == "llm":
+        return f"AI ({v.prompt_version}), {v.intent}, {v.confidence:.0%}"
+    return "policy"
