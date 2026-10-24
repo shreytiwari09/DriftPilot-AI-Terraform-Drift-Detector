@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>$title</title>
+<style>
+:root {
+  --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --card: #f6f8fa; --line: #d1d9e0;
+  --c-critical: #cf222e; --c-high: #e16f24; --c-medium: #bf8700; --c-low: #1a7f37; --c-main: #0969da;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --card: #151b23; --line: #3d444d;
+          --c-main: #4493f8; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--fg);
+       font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+main { max-width: 1100px; margin: 0 auto; }
+h1 { margin: 0 0 4px; font-size: 24px; }
+h2 { font-size: 17px; margin: 32px 0 8px; }
+.sub, .hint, .label { color: var(--muted); }
+.sub { margin: 0 0 16px; }
+.note { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.value { font-size: 22px; font-weight: 600; }
+.label { font-size: 13px; }
+.hint { font-size: 12px; }
+.chart { position: relative; height: 280px; background: var(--card); border: 1px solid var(--line);
+         border-radius: 8px; padding: 8px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+code { font-size: 13px; }
+ul { padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+<h1>$title</h1>
+<p class="sub">$period · generated $generated</p>
+$banner
+<div class="tiles">$tiles</div>
+
+<h2>New drift per day</h2>
+<p class="hint">Bars: new drift episodes. Red dots: unusual days (z-score &gt; 3).
+Dashed lines: change-points, where the level of drift shifted.</p>
+<div class="chart"><canvas id="daily"></canvas></div>
+
+<div class="grid2">
+  <div><h2>Severity mix per week</h2><div class="chart"><canvas id="severity"></canvas></div></div>
+  <div><h2>Human overrule rate per week</h2><div class="chart"><canvas id="overrule"></canvas></div></div>
+</div>
+
+<h2>Verdict monitor</h2>
+<ul>$alerts</ul>
+
+<div class="grid2">
+  <div><h2>Recurring drift (3+ times in 14 days)</h2>
+    <div class="scroll"><table>
+      <tr><th>Resource</th><th>Setting</th><th>Episodes</th></tr>$recurring
+    </table></div></div>
+  <div><h2>Unusual days</h2>
+    <div class="scroll"><table>
+      <tr><th>Day</th><th>New</th><th>Usual</th><th>z</th></tr>$anomalies
+    </table></div></div>
+</div>
+
+<h2>Is the kind of drift changing? (last 14 days vs previous 56)</h2>
+<div class="scroll"><table>
+  <tr><th>Dimension</th><th>PSI</th><th>χ² p-value</th><th>Shifted</th></tr>$shifts
+</table></div>
+</main>
+<script src="$chart_js"></script>
+<script>
+const D = $data_json;
+const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+Chart.defaults.color = css("--muted");
+Chart.defaults.borderColor = css("--line");
+Chart.defaults.maintainAspectRatio = false;
+
+const changePointLines = {
+  id: "changePoints",
+  afterDatasetsDraw(chart) {
+    const x = chart.scales.x, y = chart.scales.y, ctx = chart.ctx;
+    ctx.save();
+    ctx.strokeStyle = css("--c-critical");
+    ctx.setLineDash([4, 4]);
+    for (const day of D.changePoints) {
+      const px = x.getPixelForValue(D.days.indexOf(day));
+      ctx.beginPath(); ctx.moveTo(px, y.top); ctx.lineTo(px, y.bottom); ctx.stroke();
+    }
+    ctx.restore();
+  },
+};
+
+new Chart(document.getElementById("daily"), {
+  data: {
+    labels: D.days,
+    datasets: [
+      { type: "bar", label: "New episodes", data: D.daily, backgroundColor: css("--c-main") },
+      { type: "line", label: "Unusual day", data: D.anomalies, showLine: false, pointRadius: 6,
+        pointBackgroundColor: css("--c-critical"), borderColor: css("--c-critical") },
+    ],
+  },
+  options: { scales: { x: { ticks: { maxTicksLimit: 12 } }, y: { beginAtZero: true } } },
+  plugins: [changePointLines],
+});
+
+new Chart(document.getElementById("severity"), {
+  type: "bar",
+  data: {
+    labels: D.severity.weeks,
+    datasets: ["critical", "high", "medium", "low"].map((s) => ({
+      label: s, data: D.severity.series[s], backgroundColor: css("--c-" + s),
+    })),
+  },
+  options: { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } },
+});
+
+new Chart(document.getElementById("overrule"), {
+  type: "line",
+  data: {
+    labels: D.overrule.weeks,
+    datasets: [
+      { label: "Overruled %", data: D.overrule.rates, borderColor: css("--c-main"), tension: 0.2 },
+      { label: "Alert threshold", data: D.overrule.weeks.map(() => D.overrule.threshold),
+        borderColor: css("--c-critical"), borderDash: [6, 4], pointRadius: 0 },
+    ],
+  },
+  options: { scales: { y: { beginAtZero: true, max: 100 } } },
+});
+</script>
+</body>
+</html>

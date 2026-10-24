@@ -48,8 +48,8 @@ def monitor(episodes: pd.DataFrame, now: datetime, min_decided: int = 5) -> Moni
     week = start.dt.tz_localize(None).dt.to_period("W").dt.start_time.dt.date.astype(str)
     weekly = {}
     for wk, group in episodes.groupby(week):
-        rate, _ = _rate(group)
-        if rate is not None:
+        rate, n = _rate(group)
+        if rate is not None and n >= min_decided:  # 3 of 4 overruled is noise, not a trend
             weekly[wk] = rate
 
     recent_from = now - timedelta(RECENT_DAYS)
