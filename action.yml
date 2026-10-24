@@ -1,0 +1,35 @@
+# Phase 0 placeholder: proves the composite action runs from another repo with a secret.
+# Replaced by the real action in Phase 1 (see SPEC § Packaging).
+name: DriftPilot
+description: Detect, triage and fix Terraform drift.
+
+inputs:
+  working-directory:
+    description: Terraform folder
+    default: "."
+  llm-provider:
+    description: gemini or ollama
+    default: gemini
+  mode:
+    description: advise (issues/comments only) or open-prs
+    default: advise
+  provider-token:
+    description: Credentials Terraform's provider needs, passed as env
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Print inputs
+      shell: bash
+      # Inputs go through env, not straight into the script, so values can't inject shell code.
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        LLM_PROVIDER: ${{ inputs.llm-provider }}
+        MODE: ${{ inputs.mode }}
+        PROVIDER_TOKEN: ${{ inputs.provider-token }}
+      run: |
+        echo "working-directory: $WORKING_DIRECTORY"
+        echo "llm-provider: $LLM_PROVIDER"
+        echo "mode: $MODE"
+        if [ -n "$PROVIDER_TOKEN" ]; then echo "provider-token: set"; else echo "provider-token: not set"; fi
