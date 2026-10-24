@@ -1,0 +1,305 @@
+{
+    "format_version": "1.0",
+    "terraform_version": "1.17.0",
+    "values": {
+        "root_module": {
+            "resources": [
+                {
+                    "address": "github_branch_protection.api_main",
+                    "mode": "managed",
+                    "type": "github_branch_protection",
+                    "name": "api_main",
+                    "provider_name": "registry.terraform.io/integrations/github",
+                    "schema_version": 2,
+                    "values": {
+                        "allows_deletions": false,
+                        "allows_force_pushes": false,
+                        "enforce_admins": false,
+                        "force_push_bypassers": [],
+                        "id": "BPR_kwDOVWMhLc4FFcDh",
+                        "lock_branch": false,
+                        "pattern": "main",
+                        "repository_id": "R_kgDOVWMhLQ",
+                        "require_conversation_resolution": false,
+                        "require_signed_commits": false,
+                        "required_linear_history": false,
+                        "required_pull_request_reviews": [
+                            {
+                                "dismiss_stale_reviews": false,
+                                "dismissal_restrictions": [],
+                                "pull_request_bypassers": [],
+                                "require_code_owner_reviews": false,
+                                "require_last_push_approval": false,
+                                "required_approving_review_count": 2,
+                                "restrict_dismissals": false
+                            }
+                        ],
+                        "required_status_checks": [],
+                        "restrict_pushes": []
+                    },
+                    "sensitive_values": {
+                        "force_push_bypassers": [],
+                        "required_pull_request_reviews": [
+                            {
+                                "dismissal_restrictions": [],
+                                "pull_request_bypassers": []
+                            }
+                        ],
+                        "required_status_checks": [],
+                        "restrict_pushes": []
+                    },
+                    "depends_on": [
+                        "github_repository.api"
+                    ]
+                },
+                {
+                    "address": "github_repository.api",
+                    "mode": "managed",
+                    "type": "github_repository",
+                    "name": "api",
+                    "provider_name": "registry.terraform.io/integrations/github",
+                    "schema_version": 1,
+                    "values": {
+                        "allow_auto_merge": false,
+                        "allow_forking": true,
+                        "allow_merge_commit": true,
+                        "allow_rebase_merge": true,
+                        "allow_squash_merge": true,
+                        "allow_update_branch": false,
+                        "archive_on_destroy": null,
+                        "archived": false,
+                        "auto_init": true,
+                        "default_branch": "main",
+                        "delete_branch_on_merge": false,
+                        "description": "DriftPilot demo service (managed by Terraform)",
+                        "etag": "W/\"d52afcc9f9062667e1e56fc1c45bbaa13ebe7ea67a809327a73edeb014e3f149\"",
+                        "fork": "false",
+                        "full_name": "driftpilot-demo/demo-api",
+                        "git_clone_url": "git://github.com/driftpilot-demo/demo-api.git",
+                        "gitignore_template": null,
+                        "has_discussions": false,
+                        "has_downloads": false,
+                        "has_issues": true,
+                        "has_projects": false,
+                        "has_wiki": false,
+                        "homepage_url": "",
+                        "html_url": "https://github.com/driftpilot-demo/demo-api",
+                        "http_clone_url": "https://github.com/driftpilot-demo/demo-api.git",
+                        "id": "demo-api",
+                        "ignore_vulnerability_alerts_during_read": false,
+                        "is_template": false,
+                        "license_template": null,
+                        "merge_commit_message": "PR_TITLE",
+                        "merge_commit_title": "MERGE_MESSAGE",
+                        "name": "demo-api",
+                        "node_id": "R_kgDOVWMhLQ",
+                        "pages": [],
+                        "primary_language": "",
+                        "private": false,
+                        "repo_id": 1432559917,
+                        "security_and_analysis": [
+                            {
+                                "advanced_security": [],
+                                "code_security": [],
+                                "secret_scanning": [
+                                    {
+                                        "status": "disabled"
+                                    }
+                                ],
+                                "secret_scanning_ai_detection": [],
+                                "secret_scanning_non_provider_patterns": [],
+                                "secret_scanning_push_protection": [
+                                    {
+                                        "status": "disabled"
+                                    }
+                                ]
+                            }
+                        ],
+                        "source_owner": "",
+                        "source_repo": "",
+                        "squash_merge_commit_message": "COMMIT_MESSAGES",
+                        "squash_merge_commit_title": "COMMIT_OR_PR_TITLE",
+                        "ssh_clone_url": "git@github.com:driftpilot-demo/demo-api.git",
+                        "svn_url": "https://github.com/driftpilot-demo/demo-api",
+                        "template": [],
+                        "topics": [
+                            "demo",
+                            "driftpilot"
+                        ],
+                        "visibility": "public",
+                        "vulnerability_alerts": true,
+                        "web_commit_signoff_required": false
+                    },
+                    "sensitive_values": {
+                        "pages": [],
+                        "security_and_analysis": [
+                            {
+                                "advanced_security": [],
+                                "code_security": [],
+                                "secret_scanning": [
+                                    {}
+                                ],
+                                "secret_scanning_ai_detection": [],
+                                "secret_scanning_non_provider_patterns": [],
+                                "secret_scanning_push_protection": [
+                                    {}
+                                ]
+                            }
+                        ],
+                        "template": [],
+                        "topics": [
+                            false,
+                            false
+                        ]
+                    }
+                },
+                {
+                    "address": "github_repository.web",
+                    "mode": "managed",
+                    "type": "github_repository",
+                    "name": "web",
+                    "provider_name": "registry.terraform.io/integrations/github",
+                    "schema_version": 1,
+                    "values": {
+                        "allow_auto_merge": false,
+                        "allow_forking": true,
+                        "allow_merge_commit": true,
+                        "allow_rebase_merge": true,
+                        "allow_squash_merge": true,
+                        "allow_update_branch": false,
+                        "archive_on_destroy": null,
+                        "archived": false,
+                        "auto_init": true,
+                        "default_branch": "main",
+                        "delete_branch_on_merge": false,
+                        "description": "DriftPilot demo frontend (managed by Terraform)",
+                        "etag": "W/\"b0297c5231e8596bc8c130be9cc902e6141df67017323a042a319e64d9cce4e0\"",
+                        "fork": "false",
+                        "full_name": "driftpilot-demo/demo-web",
+                        "git_clone_url": "git://github.com/driftpilot-demo/demo-web.git",
+                        "gitignore_template": null,
+                        "has_discussions": false,
+                        "has_downloads": false,
+                        "has_issues": true,
+                        "has_projects": false,
+                        "has_wiki": false,
+                        "homepage_url": "",
+                        "html_url": "https://github.com/driftpilot-demo/demo-web",
+                        "http_clone_url": "https://github.com/driftpilot-demo/demo-web.git",
+                        "id": "demo-web",
+                        "ignore_vulnerability_alerts_during_read": false,
+                        "is_template": false,
+                        "license_template": null,
+                        "merge_commit_message": "PR_TITLE",
+                        "merge_commit_title": "MERGE_MESSAGE",
+                        "name": "demo-web",
+                        "node_id": "R_kgDOVWMg7g",
+                        "pages": [],
+                        "primary_language": "",
+                        "private": false,
+                        "repo_id": 1432559854,
+                        "security_and_analysis": [
+                            {
+                                "advanced_security": [],
+                                "code_security": [],
+                                "secret_scanning": [
+                                    {
+                                        "status": "disabled"
+                                    }
+                                ],
+                                "secret_scanning_ai_detection": [],
+                                "secret_scanning_non_provider_patterns": [],
+                                "secret_scanning_push_protection": [
+                                    {
+                                        "status": "disabled"
+                                    }
+                                ]
+                            }
+                        ],
+                        "source_owner": "",
+                        "source_repo": "",
+                        "squash_merge_commit_message": "COMMIT_MESSAGES",
+                        "squash_merge_commit_title": "COMMIT_OR_PR_TITLE",
+                        "ssh_clone_url": "git@github.com:driftpilot-demo/demo-web.git",
+                        "svn_url": "https://github.com/driftpilot-demo/demo-web",
+                        "template": [],
+                        "topics": [
+                            "demo",
+                            "driftpilot"
+                        ],
+                        "visibility": "public",
+                        "vulnerability_alerts": true,
+                        "web_commit_signoff_required": false
+                    },
+                    "sensitive_values": {
+                        "pages": [],
+                        "security_and_analysis": [
+                            {
+                                "advanced_security": [],
+                                "code_security": [],
+                                "secret_scanning": [
+                                    {}
+                                ],
+                                "secret_scanning_ai_detection": [],
+                                "secret_scanning_non_provider_patterns": [],
+                                "secret_scanning_push_protection": [
+                                    {}
+                                ]
+                            }
+                        ],
+                        "template": [],
+                        "topics": [
+                            false,
+                            false
+                        ]
+                    }
+                },
+                {
+                    "address": "github_team.developers",
+                    "mode": "managed",
+                    "type": "github_team",
+                    "name": "developers",
+                    "provider_name": "registry.terraform.io/integrations/github",
+                    "schema_version": 0,
+                    "values": {
+                        "create_default_maintainer": false,
+                        "description": "Demo team (managed by Terraform)",
+                        "etag": "W/\"43c40a784372607233619dc4a37fb8c713f773926ad98283537d731e3d8c3067\"",
+                        "id": "20299439",
+                        "ldap_dn": null,
+                        "members_count": 0,
+                        "name": "developers",
+                        "node_id": "T_kwDOFLcZRc4BNb6v",
+                        "notification_setting": "notifications_enabled",
+                        "parent_team_id": "",
+                        "parent_team_read_id": "",
+                        "parent_team_read_slug": "",
+                        "privacy": "closed",
+                        "slug": "developers"
+                    },
+                    "sensitive_values": {}
+                },
+                {
+                    "address": "github_team_repository.developers_api",
+                    "mode": "managed",
+                    "type": "github_team_repository",
+                    "name": "developers_api",
+                    "provider_name": "registry.terraform.io/integrations/github",
+                    "schema_version": 0,
+                    "values": {
+                        "etag": "W/\"bd651969d4dff1aac22ded3cd2977161a308fe19c3facf4f604de377c9e851dc\"",
+                        "id": "20299439:demo-api",
+                        "permission": "pull",
+                        "repository": "demo-api",
+                        "team_id": "20299439"
+                    },
+                    "sensitive_values": {},
+                    "depends_on": [
+                        "github_repository.api",
+                        "github_team.developers"
+                    ]
+                }
+            ]
+        }
+    }
+}
