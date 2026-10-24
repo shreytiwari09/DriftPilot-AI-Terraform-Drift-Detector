@@ -8,9 +8,7 @@ from pydantic import BaseModel, Field
 Severity = Literal["critical", "high", "medium", "low", "none"]
 Category = Literal["security", "cost", "availability", "cosmetic"]
 Intent = Literal["likely_hotfix", "likely_accidental", "likely_automation", "unknown"]
-Action = Literal[
-    "revert", "codify", "ignore_changes", "import", "recreate", "investigate", "none"
-]
+Action = Literal["revert", "codify", "ignore_changes", "import", "recreate", "investigate", "none"]
 
 
 class DriftFinding(BaseModel):
@@ -105,7 +103,5 @@ class ScanResult(BaseModel):
     def real_findings(self) -> list[DriftFinding]:
         """Findings not ruled out as noise (undecided ones count as real until triaged)."""
         return [
-            f
-            for f in self.findings
-            if (v := self.verdicts.get(f.id)) is None or v.is_real_drift
+            f for f in self.findings if (v := self.verdicts.get(f.id)) is None or v.is_real_drift
         ]

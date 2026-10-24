@@ -16,7 +16,9 @@ _SECRET_PATTERNS = [
     re.compile(r"(?:AKIA|ASIA)[0-9A-Z]{16}"),  # AWS access key IDs
     re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", re.S),
     # KEY=value / key: value where the key mentions a secret, e.g. DB_PASSWORD=..., SECRET_KEY: ...
-    re.compile(r"(?i)\b([A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY)[A-Z0-9_]*)(\s*[=:]\s*)\S+"),
+    re.compile(
+        r"(?i)\b([A-Z0-9_]*(?:PASSWORD|PASSWD|SECRET|TOKEN|API_?KEY)[A-Z0-9_]*)(\s*[=:]\s*)\S+"
+    ),
 ]
 _SECRET_KEY_NAMES = re.compile(r"(?i)^(password|passwd|secret|token|api_key|apikey|private_key)$")
 
@@ -32,7 +34,9 @@ def mask_sensitive(value: Any, marker: Any) -> Any:
     if isinstance(value, dict) and isinstance(marker, dict):
         return {k: mask_sensitive(v, marker.get(k)) for k, v in value.items()}
     if isinstance(value, list) and isinstance(marker, list):
-        return [mask_sensitive(v, marker[i] if i < len(marker) else None) for i, v in enumerate(value)]
+        return [
+            mask_sensitive(v, marker[i] if i < len(marker) else None) for i, v in enumerate(value)
+        ]
     return value
 
 
@@ -47,7 +51,9 @@ def scrub_patterns(value: Any) -> Any:
         return value
     if isinstance(value, dict):
         return {
-            k: REDACTED if _SECRET_KEY_NAMES.match(str(k)) and v not in (None, "") else scrub_patterns(v)
+            k: REDACTED
+            if _SECRET_KEY_NAMES.match(str(k)) and v not in (None, "")
+            else scrub_patterns(v)
             for k, v in value.items()
         }
     if isinstance(value, list):

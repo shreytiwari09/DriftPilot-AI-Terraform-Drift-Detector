@@ -1,4 +1,7 @@
-"""Scanner interface: find platform resources that Terraform state doesn't know about (SPEC §4.3)."""
+"""Scanner interface: find platform resources that Terraform state doesn't know about.
+
+See SPEC §4.3.
+"""
 
 import re
 from collections.abc import Iterator
