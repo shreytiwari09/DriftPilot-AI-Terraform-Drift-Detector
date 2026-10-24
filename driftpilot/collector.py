@@ -20,7 +20,7 @@ class TerraformError(RuntimeError):
     pass
 
 
-def _run(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
+def run_terraform(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "TF_IN_AUTOMATION": "1", "TF_INPUT": "0"}
     try:
         return subprocess.run(
@@ -32,7 +32,9 @@ def _run(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProces
         raise TerraformError(f"terraform {args[0]} timed out after {timeout}s") from e
 
 
-def _check(result: subprocess.CompletedProcess[str], what: str, ok: tuple[int, ...] = (0,)) -> None:
+def check_result(
+    result: subprocess.CompletedProcess[str], what: str, ok: tuple[int, ...] = (0,)
+) -> None:
     if result.returncode not in ok:
         stderr = result.stderr.strip() or result.stdout.strip()
         raise TerraformError(
@@ -41,7 +43,7 @@ def _check(result: subprocess.CompletedProcess[str], what: str, ok: tuple[int, .
 
 
 def terraform_init(working_dir: Path, timeout: int = DEFAULT_TIMEOUT) -> None:
-    _check(_run(["init", "-input=false", "-no-color"], working_dir, timeout), "init")
+    check_result(run_terraform(["init", "-input=false", "-no-color"], working_dir, timeout), "init")
 
 
 def refresh_only_plan(working_dir: Path, timeout: int = DEFAULT_TIMEOUT) -> dict[str, Any]:
@@ -55,16 +57,16 @@ def refresh_only_plan(working_dir: Path, timeout: int = DEFAULT_TIMEOUT) -> dict
             "plan", "-refresh-only", "-detailed-exitcode", "-input=false", "-lock=false",
             "-no-color", f"-out={plan_file}",
         ]  # fmt: skip
-        _check(_run(args, working_dir, timeout), "plan", ok=(0, 2))
-        shown = _run(["show", "-json", str(plan_file)], working_dir, timeout)
-        _check(shown, "show")
+        check_result(run_terraform(args, working_dir, timeout), "plan", ok=(0, 2))
+        shown = run_terraform(["show", "-json", str(plan_file)], working_dir, timeout)
+        check_result(shown, "show")
     return json.loads(shown.stdout)
 
 
 def show_state(working_dir: Path, timeout: int = DEFAULT_TIMEOUT) -> dict[str, Any]:
     """Current state as JSON (used by scanners to know what's managed)."""
-    shown = _run(["show", "-json"], working_dir, timeout)
-    _check(shown, "show")
+    shown = run_terraform(["show", "-json"], working_dir, timeout)
+    check_result(shown, "show")
     return json.loads(shown.stdout)
 
 
