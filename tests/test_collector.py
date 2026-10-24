@@ -67,6 +67,25 @@ def test_list_length_change_is_one_finding(load_fixture) -> None:
     assert ports[0].after == []
 
 
+def _update_plan(before: dict, after: dict) -> dict:
+    return {
+        "resource_drift": [
+            {
+                "address": "github_repository.api",
+                "type": "github_repository",
+                "provider_name": "p",
+                "change": {"actions": ["update"], "before": before, "after": after},
+            }
+        ]
+    }
+
+
+def test_list_of_plain_values_is_one_finding() -> None:
+    plan = _update_plan({"topics": ["a", "b"]}, {"topics": ["b", "a"]})
+    [f] = parse_plan(plan, "r1", NOW)
+    assert (f.attribute_path, f.before, f.after) == ("topics", ["a", "b"], ["b", "a"])
+
+
 def test_ids_are_stable() -> None:
     assert finding_id("a.b", "x") == finding_id("a.b", "x")
     assert finding_id("a.b", "x") != finding_id("a.b", "y")

@@ -35,7 +35,9 @@ def _run(args: list[str], cwd: Path, timeout: int) -> subprocess.CompletedProces
 def _check(result: subprocess.CompletedProcess[str], what: str, ok: tuple[int, ...] = (0,)) -> None:
     if result.returncode not in ok:
         stderr = result.stderr.strip() or result.stdout.strip()
-        raise TerraformError(f"terraform {what} failed (exit {result.returncode}):\n{stderr[-4000:]}")
+        raise TerraformError(
+            f"terraform {what} failed (exit {result.returncode}):\n{stderr[-4000:]}"
+        )
 
 
 def terraform_init(working_dir: Path, timeout: int = DEFAULT_TIMEOUT) -> None:
@@ -89,8 +91,9 @@ def _diff(
 ) -> Iterator[tuple[str, Any, Any, Any, Any]]:
     """Yield (path, before, after, before_marker, after_marker) for each changed leaf.
 
-    Lists of equal length are compared item by item (`ingress[0].cidr_blocks`); lists whose
-    length changed are reported as one change of the whole list.
+    Lists of blocks with equal length are compared item by item (`ingress[0].cidr_blocks`).
+    Lists of plain values (topics, tags, CIDRs), and lists whose length changed, are reported
+    as one change of the whole list, so rules can see e.g. "same members, new order".
     """
     if isinstance(before, dict) and isinstance(after, dict):
         for key in sorted(set(before) | set(after)):
@@ -98,11 +101,29 @@ def _diff(
                 before.get(key), after.get(key),
                 _child_marker(b_mark, key), _child_marker(a_mark, key), _join(path, key),
             )  # fmt: skip
-    elif isinstance(before, list) and isinstance(after, list) and len(before) == len(after):
+    elif (
+        isinstance(before, list)
+        and isinstance(after, list)
+        and len(before) == len(after)
+        and any(isinstance(item, dict | list) for item in before + after)
+    ):
         for i, (b, a) in enumerate(zip(before, after, strict=True)):
-            yield from _diff(b, a, _child_marker(b_mark, i), _child_marker(a_mark, i), f"{path}[{i}]")
+            yield from _diff(
+                b, a, _child_marker(b_mark, i), _child_marker(a_mark, i), f"{path}[{i}]"
+            )
     elif before != after:
         yield path, before, after, b_mark, a_mark
+
+
+def resource_values(plan: dict[str, Any]) -> dict[str, Any]:
+    """Redacted `after` value of each drifted resource, keyed by address.
+
+    Rules use it as context, e.g. the port of the ingress block whose CIDR changed.
+    """
+    return {
+        rc["address"]: redact(rc["change"].get("after"), rc["change"].get("after_sensitive"))
+        for rc in plan.get("resource_drift") or []
+    }
 
 
 def parse_plan(plan: dict[str, Any], run_id: str, detected_at: datetime) -> list[DriftFinding]:
