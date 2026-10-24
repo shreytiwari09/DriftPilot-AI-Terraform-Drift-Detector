@@ -13,6 +13,7 @@ from typing import Literal
 from driftpilot.collector import DEFAULT_TIMEOUT, run_terraform
 
 _NOISY = ("Refreshing state", "Reading...", "Read complete", "Preparing import")
+_BOX = ("╷", "│", "╵")  # Terraform's warning boxes, e.g. "Resource targeting is in effect"
 
 
 @dataclass
@@ -24,7 +25,11 @@ class VerifyResult:
 
 
 def trim_plan(text: str, max_lines: int = 40) -> str:
-    lines = [ln for ln in text.splitlines() if ln.strip() and not any(n in ln for n in _NOISY)]
+    lines = [
+        ln
+        for ln in text.splitlines()
+        if ln.strip() and not ln.startswith(_BOX) and not any(n in ln for n in _NOISY)
+    ]
     return "\n".join(lines[-max_lines:])
 
 

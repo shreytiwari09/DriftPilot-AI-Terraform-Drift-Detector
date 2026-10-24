@@ -85,6 +85,9 @@ def test_import_only_plan(tmp_path: Path) -> None:
         ).verified
 
 
-def test_trim_plan_drops_refresh_noise() -> None:
-    text = "x: Refreshing state... [id=1]\n\nNo changes.\n"
-    assert trim_plan(text) == "No changes."
+def test_trim_plan_drops_refresh_noise_and_warning_boxes() -> None:
+    text = (
+        "x: Refreshing state... [id=1]\n\nNo changes. Your infrastructure matches.\n"
+        "╷\n│ Warning: Resource targeting is in effect\n│ \n│ Do not use routinely.\n╵\n"
+    )
+    assert trim_plan(text) == "No changes. Your infrastructure matches."
