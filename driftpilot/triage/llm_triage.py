@@ -1,4 +1,8 @@
-"""LLM triage for findings no rule decided (SPEC §4.4 step 2)."""
+"""LLM triage for findings no rule decided (SPEC §4.4 step 2).
+
+One LLM call per resource: the model sees all of a resource's changes together, which both judges
+related changes better and keeps within free-tier request quotas.
+"""
 
 import json
 import re
@@ -16,8 +20,9 @@ _VERSION = re.compile(r"<!--\s*prompt_version:\s*(\S+)\s*-->")
 
 
 class LLMVerdict(BaseModel):
-    """What the LLM must return: a Verdict without finding_id/source."""
+    """A Verdict without finding_id/source, for one changed setting."""
 
+    attribute_path: str | None
     is_real_drift: bool
     severity: Severity
     category: Category
@@ -25,6 +30,10 @@ class LLMVerdict(BaseModel):
     recommended_action: Action
     confidence: float = Field(ge=0, le=1)
     reason: str
+
+
+class ResourceVerdicts(BaseModel):
+    verdicts: list[LLMVerdict]
 
 
 @cache
@@ -54,60 +63,69 @@ def fallback_verdict(finding_id: str, why: str, prompt_version: str | None) -> V
 
 
 def build_input(
-    finding: DriftFinding,
-    siblings: list[DriftFinding],
-    working_dir: Path | None,
-    times_drifted_before: int,
+    findings: list[DriftFinding], working_dir: Path | None, history_counts: dict[str, int]
 ) -> dict:
-    block = find_block(working_dir, finding.address) if working_dir else None
+    first = findings[0]
+    block = find_block(working_dir, first.address) if working_dir else None
     return {
-        "resource_type": finding.resource_type,
-        "address": finding.address,
-        "change_kind": finding.change_kind,
-        "attribute_path": finding.attribute_path,
-        "before": finding.before,
-        "after": finding.after,
-        "detected_at": finding.detected_at.isoformat(),
-        "times_drifted_before": times_drifted_before,
-        "other_changes_on_resource": [
-            {"attribute_path": s.attribute_path, "before": s.before, "after": s.after}
-            for s in siblings
-        ],
+        "resource_type": first.resource_type,
+        "address": first.address,
+        "detected_at": first.detected_at.isoformat(),
         "resource_code": block.text if block else None,
+        "changes": [
+            {
+                "attribute_path": f.attribute_path,
+                "change_kind": f.change_kind,
+                "before": f.before,
+                "after": f.after,
+                "times_drifted_before": history_counts.get(f.id, 0),
+            }
+            for f in findings
+        ],
     }
 
 
-def triage_one(
+def triage_resource(
     llm: LLMClient,
-    finding: DriftFinding,
-    siblings: list[DriftFinding],
+    findings: list[DriftFinding],
     working_dir: Path | None = None,
-    times_drifted_before: int = 0,
-) -> Verdict:
-    """Ask the LLM; parse into a Verdict; retry once on a bad answer; else `investigate`."""
+    history_counts: dict[str, int] | None = None,
+) -> dict[str, Verdict]:
+    """Verdicts for all `findings` of one resource; retry once on a bad answer; else investigate."""
     version, system = load_prompt("triage")
-    payload = build_input(finding, siblings, working_dir, times_drifted_before)
-    prompt = "Judge this change:\n" + json.dumps(payload, indent=2, default=str)
-    schema = LLMVerdict.model_json_schema()
+    payload = build_input(findings, working_dir, history_counts or {})
+    prompt = "Judge these changes:\n" + json.dumps(payload, indent=2, default=str)
+    by_path = {f.attribute_path: f for f in findings}
+    out: dict[str, Verdict] = {}
     for attempt in range(2):
         try:
-            raw = ask(llm, system, prompt, schema)
+            raw = ask(llm, system, prompt, ResourceVerdicts.model_json_schema())
         except LLMError as e:
-            return fallback_verdict(finding.id, f"LLM unavailable: {str(e)[:120]}", version)
+            reason = f"LLM unavailable: {str(e)[:120]}"
+            return {f.id: fallback_verdict(f.id, reason, version) for f in findings}
         try:
-            parsed = LLMVerdict.model_validate_json(raw)
+            answers = ResourceVerdicts.model_validate_json(raw).verdicts
         except ValidationError as e:
-            if attempt == 0:
-                prompt += (
-                    "\n\nYour previous answer was not valid for the schema "
-                    f"({e.error_count()} error(s)). Answer again with valid JSON only."
-                )
-                continue
-            return fallback_verdict(finding.id, "the model's answer was invalid twice", version)
-        return Verdict(
-            finding_id=finding.id, source="llm", prompt_version=version, **parsed.model_dump()
+            problem = f"it was not valid for the schema ({e.error_count()} error(s))"
+        else:
+            for a in answers:
+                finding = by_path.get(a.attribute_path)
+                if finding and finding.id not in out:
+                    data = a.model_dump(exclude={"attribute_path"})
+                    out[finding.id] = Verdict(
+                        finding_id=finding.id, source="llm", prompt_version=version, **data
+                    )
+            missing = [f.attribute_path for f in findings if f.id not in out]
+            if not missing:
+                return out
+            problem = f"it had no verdict for: {missing}"
+        if attempt == 0:
+            prompt += f"\n\nYour previous answer was rejected because {problem}. Answer again."
+    for f in findings:
+        out.setdefault(
+            f.id, fallback_verdict(f.id, "the model's answer was invalid twice", version)
         )
-    raise AssertionError("unreachable")
+    return out
 
 
 def triage_findings(
@@ -117,14 +135,12 @@ def triage_findings(
     working_dir: Path | None = None,
     history_counts: dict[str, int] | None = None,
 ) -> dict[str, Verdict]:
-    """Verdicts for every finding not already in `decided`."""
-    history_counts = history_counts or {}
+    """Verdicts for every finding not already in `decided`, one LLM call per resource."""
+    by_address: dict[str, list[DriftFinding]] = {}
+    for f in findings:
+        if f.id not in decided:
+            by_address.setdefault(f.address, []).append(f)
     out: dict[str, Verdict] = {}
-    for finding in findings:
-        if finding.id in decided:
-            continue
-        siblings = [f for f in findings if f.address == finding.address and f.id != finding.id]
-        out[finding.id] = triage_one(
-            llm, finding, siblings, working_dir, history_counts.get(finding.id, 0)
-        )
+    for group in by_address.values():
+        out |= triage_resource(llm, group, working_dir, history_counts)
     return out

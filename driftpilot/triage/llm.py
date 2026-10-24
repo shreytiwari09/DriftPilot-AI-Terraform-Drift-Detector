@@ -1,6 +1,7 @@
 """The only way DriftPilot talks to an LLM (SPEC §4.4). Every prompt is redacted here first."""
 
 import os
+import re
 import time
 from collections.abc import Sequence
 from typing import Any, Protocol
@@ -10,10 +11,12 @@ import httpx
 from driftpilot.config import LLMConfig
 from driftpilot.redact import scrub_patterns
 
-# Pinned, not "-latest", so verdicts don't change silently. 3.5 Flash answered a small structured
-# question in ~3 s; 3.8 Flash took ~45 s (measured Oct 2026). 2.5 Flash is closed to new keys.
-DEFAULT_MODELS = {"gemini": "gemini-3.5-flash", "ollama": "llama3.1:8b"}
+# Pinned, not "-latest", so verdicts don't change silently. Flash-Lite: ~1.5 s per call and its own
+# free quota; 3.5 Flash's free tier allows only 20 requests a day (measured Oct 2026).
+DEFAULT_MODELS = {"gemini": "gemini-3.1-flash-lite", "ollama": "llama3.1:8b"}
 _RETRY_DELAYS = (2, 5, 15)  # seconds; free tiers rate-limit per minute
+_MAX_WAIT = 60  # a longer "retry in" means a daily quota: fail now instead of waiting
+_RETRY_IN = re.compile(r"retry in ([0-9.]+)s|'retryDelay': '([0-9.]+)s'")
 
 
 class LLMError(RuntimeError):
@@ -56,6 +59,8 @@ class GeminiClient:
                 return response.text or ""
             except errors.APIError as e:
                 retryable = e.code in (429, 500, 502, 503, 504)
+                if match := _RETRY_IN.search(str(e)):
+                    retryable = retryable and float(match.group(1) or match.group(2)) <= _MAX_WAIT
                 if not retryable or delay is None:
                     raise LLMError(f"Gemini request failed (attempt {attempt + 1}): {e}") from e
                 time.sleep(delay)

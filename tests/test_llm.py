@@ -86,6 +86,21 @@ def test_gemini_retries_rate_limit_then_succeeds() -> None:
     assert config.system_instruction == "sys"
 
 
+def test_gemini_daily_quota_fails_fast() -> None:
+    from google.genai import errors
+
+    with (
+        patch("google.genai.Client") as client_cls,
+        patch("driftpilot.triage.llm.time.sleep") as sleep,
+    ):
+        client_cls.return_value.models.generate_content.side_effect = errors.APIError(
+            429, {"error": {"message": "Quota exceeded. Please retry in 29027.5s."}}
+        )
+        with pytest.raises(LLMError, match="Quota exceeded"):
+            GeminiClient("k", "m", 0.1).complete_json("s", "p", SCHEMA)
+    sleep.assert_not_called()
+
+
 def test_gemini_non_retryable_error_raises() -> None:
     from google.genai import errors
 
