@@ -4,16 +4,18 @@ Terraform for the `driftpilot-demo` org: two public repos (`demo-api`, `demo-web
 `demo-api`'s `main` (2 required approvals), and a `developers` team with `pull` access to `demo-api`.
 Repos are public because branch protection on private repos needs a paid plan.
 
+**This folder is the reference copy.** The live copy, with its state, is in the private
+`driftpilot-demo/infra` repo under `infra/`, where the DriftPilot Action runs against it. Make changes there
+and mirror them here.
+
 ```bash
-cd demo/github
+cd infra   # in a clone of driftpilot-demo/infra
 export GITHUB_TOKEN=<fine-grained PAT for the org>   # Administration + Contents (repo), Members (org)
 terraform init
-terraform apply
-terraform apply -refresh-only        # once after apply, see "First refresh" below
 terraform plan -refresh-only -detailed-exitcode
 ```
 
-State is local and gitignored for now. A real setup uses a remote backend with locking.
+The demo commits its state to that private repo; a real setup uses a remote backend with locking.
 
 ## Phase 0 findings (Terraform 1.17.0, integrations/github 6.13.0)
 
