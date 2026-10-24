@@ -10,6 +10,7 @@ from rich.console import Console
 from driftpilot import __version__
 from driftpilot.collector import TerraformError
 from driftpilot.config import load_config
+from driftpilot.envfile import load_env_file
 from driftpilot.models import ScanResult
 from driftpilot.report import counts
 from driftpilot.report.console import print_result
@@ -19,6 +20,12 @@ from driftpilot.scan import run_scan
 app = typer.Typer(help="Detect, triage and fix Terraform drift.", no_args_is_help=True)
 console = Console()
 err_console = Console(stderr=True)
+
+
+@app.callback()
+def _startup() -> None:
+    """Detect, triage and fix Terraform drift."""
+    load_env_file()  # local secrets such as GEMINI_API_KEY; real env vars win
 
 
 def _scan_or_exit(

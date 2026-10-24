@@ -1,6 +1,7 @@
 """Load `.driftpilot.yml` (SPEC §5.2). A missing file means all defaults."""
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
@@ -16,9 +17,11 @@ class SeverityOverride(BaseModel):
 
 
 class LLMConfig(BaseModel):
-    provider: str = "gemini"
-    model: str | None = None
+    enabled: bool = True  # off, or no API key: undecided findings stay "needs triage"
+    provider: Literal["gemini", "ollama"] = "gemini"
+    model: str | None = None  # None = the provider client's default
     temperature: float = 0.1
+    base_url: str = "http://localhost:11434"  # Ollama only
 
 
 class DockerScannerConfig(BaseModel):
@@ -43,6 +46,7 @@ class Config(BaseModel):
     ignore: list[str] = []  # address/attribute globs, e.g. "docker_container.*.restart"
     confidence_threshold: float = Field(default=0.7, ge=0, le=1)
     max_codify_retries: int = 3
+    mode: Literal["advise", "open-prs"] = "advise"  # advise = issues only, never PRs
     llm: LLMConfig = LLMConfig()
     scanners: ScannersConfig = ScannersConfig()
 
