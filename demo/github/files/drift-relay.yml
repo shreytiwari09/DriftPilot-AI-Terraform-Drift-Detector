@@ -1,0 +1,23 @@
+# Managed by Terraform (driftpilot-demo/infra). Do not edit by hand.
+# GitHub only fires branch_protection_rule in the repo that owns the rule, so this relay asks
+# the infra repo to run DriftPilot whenever this repo's branch protection changes.
+name: DriftPilot relay
+
+on:
+  branch_protection_rule:
+
+permissions: {}
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask infra to run DriftPilot
+        env:
+          GH_TOKEN: ${{ secrets.RELAY_TOKEN }}
+          EVENT_ACTION: ${{ github.event.action }}
+        run: |
+          gh api repos/driftpilot-demo/infra/dispatches \
+            -f event_type=drift-check \
+            -f "client_payload[source]=${GITHUB_REPOSITORY}" \
+            -f "client_payload[action]=${EVENT_ACTION}"

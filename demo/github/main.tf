@@ -56,3 +56,14 @@ resource "github_team_repository" "developers_api" {
   repository = github_repository.api.name
   permission = "pull"
 }
+
+# Relay: starts the infra repo's DriftPilot run when demo-api's branch protection changes.
+# Its RELAY_TOKEN secret is set with `gh secret set`, not Terraform, so the token never lands in state.
+resource "github_repository_file" "api_drift_relay" {
+  repository          = github_repository.api.name
+  branch              = "main"
+  file                = ".github/workflows/drift-relay.yml"
+  content             = file("${path.module}/files/drift-relay.yml")
+  commit_message      = "Add DriftPilot relay workflow (managed by Terraform)"
+  overwrite_on_create = true
+}
