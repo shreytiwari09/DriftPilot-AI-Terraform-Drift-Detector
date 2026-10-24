@@ -4,6 +4,7 @@ Never touches the real working directory or its state.
 """
 
 import json
+import re
 import shutil
 import tempfile
 from dataclasses import dataclass, field
@@ -24,7 +25,11 @@ class VerifyResult:
     files: dict[str, str] = field(default_factory=dict)  # formatted contents, by relative path
 
 
+_TARGET_WARNING = re.compile(r"Warning: Resource targeting is in effect.*?error message\.", re.S)
+
+
 def trim_plan(text: str, max_lines: int = 40) -> str:
+    text = _TARGET_WARNING.sub("", text)
     lines = [
         ln
         for ln in text.splitlines()

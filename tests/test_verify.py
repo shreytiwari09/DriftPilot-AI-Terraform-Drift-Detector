@@ -91,3 +91,8 @@ def test_trim_plan_drops_refresh_noise_and_warning_boxes() -> None:
         "╷\n│ Warning: Resource targeting is in effect\n│ \n│ Do not use routinely.\n╵\n"
     )
     assert trim_plan(text) == "No changes. Your infrastructure matches."
+    plain = (  # -no-color output has no box characters
+        "No changes.\n\nWarning: Resource targeting is in effect\n\nYou are creating a plan\n"
+        "Terraform specifically suggests to use it as part of an error message.\n"
+    )
+    assert trim_plan(plain) == "No changes."
