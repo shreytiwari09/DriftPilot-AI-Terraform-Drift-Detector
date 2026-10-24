@@ -1,0 +1,709 @@
+{
+    "format_version": "1.2",
+    "terraform_version": "1.17.0",
+    "planned_values": {
+        "root_module": {}
+    },
+    "resource_drift": [
+        {
+            "address": "docker_container.cache",
+            "mode": "managed",
+            "type": "docker_container",
+            "name": "cache",
+            "provider_name": "registry.terraform.io/kreuzwerker/docker",
+            "change": {
+                "actions": [
+                    "delete"
+                ],
+                "before": {
+                    "attach": false,
+                    "bridge": "",
+                    "capabilities": [],
+                    "cgroup_parent": null,
+                    "cgroupns_mode": null,
+                    "command": [
+                        "redis-server"
+                    ],
+                    "container_logs": null,
+                    "container_read_refresh_timeout_milliseconds": 15000,
+                    "cpu_period": null,
+                    "cpu_quota": null,
+                    "cpu_set": "",
+                    "cpu_shares": 0,
+                    "cpus": null,
+                    "destroy_grace_seconds": null,
+                    "device_cgroup_rules": [],
+                    "device_read_bps": [],
+                    "device_read_iops": [],
+                    "device_requests": [],
+                    "device_write_bps": [],
+                    "device_write_iops": [],
+                    "devices": [],
+                    "dns": [],
+                    "dns_opts": [],
+                    "dns_search": [],
+                    "domainname": "",
+                    "entrypoint": [
+                        "docker-entrypoint.sh"
+                    ],
+                    "env": [],
+                    "exit_code": null,
+                    "gpus": null,
+                    "group_add": [],
+                    "healthcheck": [],
+                    "host": [],
+                    "hostname": "784c24ab0987",
+                    "id": "784c24ab09872fb4a329f1f017ce9d455743d2f0ba8fbfd4f14938c85ae34cba",
+                    "image": "sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0",
+                    "init": false,
+                    "ipc_mode": "private",
+                    "labels": [
+                        {
+                            "label": "app",
+                            "value": "driftpilot-demo"
+                        },
+                        {
+                            "label": "managed-by",
+                            "value": "terraform"
+                        }
+                    ],
+                    "log_driver": "json-file",
+                    "log_opts": {},
+                    "logs": false,
+                    "max_retry_count": 0,
+                    "memory": 128,
+                    "memory_reservation": 0,
+                    "memory_swap": 256,
+                    "mounts": [],
+                    "must_run": true,
+                    "name": "driftpilot-demo-cache",
+                    "network_data": [
+                        {
+                            "gateway": "172.18.0.1",
+                            "global_ipv6_address": "",
+                            "global_ipv6_prefix_length": 0,
+                            "ip_address": "172.18.0.2",
+                            "ip_prefix_length": 16,
+                            "ipv6_gateway": "",
+                            "mac_address": "7a:c8:76:a7:f9:e0",
+                            "network_name": "driftpilot-demo-net"
+                        }
+                    ],
+                    "network_mode": "bridge",
+                    "networks_advanced": [
+                        {
+                            "aliases": [],
+                            "driver_opts": [],
+                            "gw_priority": 0,
+                            "ipv4_address": "",
+                            "ipv6_address": "",
+                            "link_local_ips": [],
+                            "mac_address": "",
+                            "name": "d7554f2a1cc0a120eaff7a39461d7dcf2b028e0d68419c7dd05c8eaa6eb03502"
+                        }
+                    ],
+                    "pid_mode": null,
+                    "platform": "linux",
+                    "ports": [],
+                    "privileged": false,
+                    "publish_all_ports": false,
+                    "read_only": false,
+                    "remove_volumes": true,
+                    "restart": "unless-stopped",
+                    "rm": false,
+                    "runtime": "runc",
+                    "security_opts": [],
+                    "shm_size": 64,
+                    "start": true,
+                    "stdin_open": false,
+                    "stop_signal": "",
+                    "stop_timeout": 0,
+                    "storage_opts": {},
+                    "sysctls": {},
+                    "timeouts": null,
+                    "tmpfs": {},
+                    "tty": false,
+                    "ulimit": [],
+                    "upload": [],
+                    "user": "",
+                    "userns_mode": "",
+                    "volumes": [
+                        {
+                            "container_path": "/data",
+                            "from_container": "",
+                            "host_path": "",
+                            "read_only": false,
+                            "selinux_relabel": "",
+                            "volume_name": "driftpilot-demo-cache-data"
+                        }
+                    ],
+                    "wait": false,
+                    "wait_timeout": 60,
+                    "working_dir": "/data"
+                },
+                "after": null,
+                "after_unknown": {},
+                "before_sensitive": {
+                    "capabilities": [],
+                    "command": [
+                        false
+                    ],
+                    "device_cgroup_rules": [],
+                    "device_read_bps": [],
+                    "device_read_iops": [],
+                    "device_requests": [],
+                    "device_write_bps": [],
+                    "device_write_iops": [],
+                    "devices": [],
+                    "dns": [],
+                    "dns_opts": [],
+                    "dns_search": [],
+                    "entrypoint": [
+                        false
+                    ],
+                    "env": [],
+                    "group_add": [],
+                    "healthcheck": [],
+                    "host": [],
+                    "labels": [
+                        {},
+                        {}
+                    ],
+                    "log_opts": {},
+                    "mounts": [],
+                    "network_data": [
+                        {}
+                    ],
+                    "networks_advanced": [
+                        {
+                            "aliases": [],
+                            "driver_opts": [],
+                            "link_local_ips": []
+                        }
+                    ],
+                    "ports": [],
+                    "security_opts": [],
+                    "storage_opts": {},
+                    "sysctls": {},
+                    "tmpfs": {},
+                    "ulimit": [],
+                    "upload": [],
+                    "volumes": [
+                        {}
+                    ]
+                },
+                "after_sensitive": false
+            }
+        }
+    ],
+    "prior_state": {
+        "format_version": "1.0",
+        "terraform_version": "1.17.0",
+        "values": {
+            "root_module": {
+                "resources": [
+                    {
+                        "address": "docker_container.web",
+                        "mode": "managed",
+                        "type": "docker_container",
+                        "name": "web",
+                        "provider_name": "registry.terraform.io/kreuzwerker/docker",
+                        "schema_version": 2,
+                        "values": {
+                            "attach": false,
+                            "bridge": "",
+                            "capabilities": [],
+                            "cgroup_parent": null,
+                            "cgroupns_mode": null,
+                            "command": [
+                                "nginx",
+                                "-g",
+                                "daemon off;"
+                            ],
+                            "container_logs": null,
+                            "container_read_refresh_timeout_milliseconds": 15000,
+                            "cpu_period": null,
+                            "cpu_quota": null,
+                            "cpu_set": "",
+                            "cpu_shares": 0,
+                            "cpus": null,
+                            "destroy_grace_seconds": null,
+                            "device_cgroup_rules": [],
+                            "device_read_bps": [],
+                            "device_read_iops": [],
+                            "device_requests": [],
+                            "device_write_bps": [],
+                            "device_write_iops": [],
+                            "devices": [],
+                            "dns": [],
+                            "dns_opts": [],
+                            "dns_search": [],
+                            "domainname": "",
+                            "entrypoint": [
+                                "/docker-entrypoint.sh"
+                            ],
+                            "env": [],
+                            "exit_code": null,
+                            "gpus": null,
+                            "group_add": [],
+                            "healthcheck": [],
+                            "host": [],
+                            "hostname": "14eca41399c2",
+                            "id": "14eca41399c270cbaff0ae29c098628f136a03b8ccb79b209156ced212c95a94",
+                            "image": "sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417",
+                            "init": false,
+                            "ipc_mode": "private",
+                            "labels": [
+                                {
+                                    "label": "app",
+                                    "value": "driftpilot-demo"
+                                },
+                                {
+                                    "label": "managed-by",
+                                    "value": "terraform"
+                                }
+                            ],
+                            "log_driver": "json-file",
+                            "log_opts": {},
+                            "logs": false,
+                            "max_retry_count": 0,
+                            "memory": 256,
+                            "memory_reservation": 0,
+                            "memory_swap": 512,
+                            "mounts": [],
+                            "must_run": true,
+                            "name": "driftpilot-demo-web",
+                            "network_data": [
+                                {
+                                    "gateway": "172.18.0.1",
+                                    "global_ipv6_address": "",
+                                    "global_ipv6_prefix_length": 0,
+                                    "ip_address": "172.18.0.3",
+                                    "ip_prefix_length": 16,
+                                    "ipv6_gateway": "",
+                                    "mac_address": "ee:c4:3a:6e:c9:a9",
+                                    "network_name": "driftpilot-demo-net"
+                                }
+                            ],
+                            "network_mode": "bridge",
+                            "networks_advanced": [
+                                {
+                                    "aliases": [],
+                                    "driver_opts": [],
+                                    "gw_priority": 0,
+                                    "ipv4_address": "",
+                                    "ipv6_address": "",
+                                    "link_local_ips": [],
+                                    "mac_address": "",
+                                    "name": "d7554f2a1cc0a120eaff7a39461d7dcf2b028e0d68419c7dd05c8eaa6eb03502"
+                                }
+                            ],
+                            "pid_mode": null,
+                            "platform": "linux",
+                            "ports": [
+                                {
+                                    "external": 8080,
+                                    "internal": 80,
+                                    "ip": "0.0.0.0",
+                                    "protocol": "tcp"
+                                }
+                            ],
+                            "privileged": false,
+                            "publish_all_ports": false,
+                            "read_only": false,
+                            "remove_volumes": true,
+                            "restart": "unless-stopped",
+                            "rm": false,
+                            "runtime": "runc",
+                            "security_opts": [],
+                            "shm_size": 64,
+                            "start": true,
+                            "stdin_open": false,
+                            "stop_signal": "SIGQUIT",
+                            "stop_timeout": 0,
+                            "storage_opts": {},
+                            "sysctls": {},
+                            "timeouts": null,
+                            "tmpfs": {},
+                            "tty": false,
+                            "ulimit": [],
+                            "upload": [],
+                            "user": "",
+                            "userns_mode": "",
+                            "volumes": [],
+                            "wait": false,
+                            "wait_timeout": 60,
+                            "working_dir": "/"
+                        },
+                        "sensitive_values": {
+                            "capabilities": [],
+                            "command": [
+                                false,
+                                false,
+                                false
+                            ],
+                            "device_cgroup_rules": [],
+                            "device_read_bps": [],
+                            "device_read_iops": [],
+                            "device_requests": [],
+                            "device_write_bps": [],
+                            "device_write_iops": [],
+                            "devices": [],
+                            "dns": [],
+                            "dns_opts": [],
+                            "dns_search": [],
+                            "entrypoint": [
+                                false
+                            ],
+                            "env": [],
+                            "group_add": [],
+                            "healthcheck": [],
+                            "host": [],
+                            "labels": [
+                                {},
+                                {}
+                            ],
+                            "log_opts": {},
+                            "mounts": [],
+                            "network_data": [
+                                {}
+                            ],
+                            "networks_advanced": [
+                                {
+                                    "aliases": [],
+                                    "driver_opts": [],
+                                    "link_local_ips": []
+                                }
+                            ],
+                            "ports": [
+                                {}
+                            ],
+                            "security_opts": [],
+                            "storage_opts": {},
+                            "sysctls": {},
+                            "tmpfs": {},
+                            "ulimit": [],
+                            "upload": [],
+                            "volumes": []
+                        },
+                        "depends_on": [
+                            "docker_image.nginx",
+                            "docker_network.app"
+                        ]
+                    },
+                    {
+                        "address": "docker_image.nginx",
+                        "mode": "managed",
+                        "type": "docker_image",
+                        "name": "nginx",
+                        "provider_name": "registry.terraform.io/kreuzwerker/docker",
+                        "schema_version": 0,
+                        "values": {
+                            "build": [],
+                            "force_remove": null,
+                            "id": "sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417nginx:alpine",
+                            "image_id": "sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417",
+                            "keep_locally": true,
+                            "name": "nginx:alpine",
+                            "platform": null,
+                            "pull_triggers": null,
+                            "repo_digest": "nginx@sha256:a3554c0d0b48177b1413c26e01f695334428020d9df01243fbae3e11cfd17417",
+                            "timeouts": null,
+                            "triggers": null
+                        },
+                        "sensitive_values": {
+                            "build": []
+                        }
+                    },
+                    {
+                        "address": "docker_image.redis",
+                        "mode": "managed",
+                        "type": "docker_image",
+                        "name": "redis",
+                        "provider_name": "registry.terraform.io/kreuzwerker/docker",
+                        "schema_version": 0,
+                        "values": {
+                            "build": [],
+                            "force_remove": null,
+                            "id": "sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0redis:alpine",
+                            "image_id": "sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0",
+                            "keep_locally": true,
+                            "name": "redis:alpine",
+                            "platform": null,
+                            "pull_triggers": null,
+                            "repo_digest": "redis@sha256:0bf6577d7774e592b29d093e3ac9390eb91e13d72c21e506afce736de5e0eeb0",
+                            "timeouts": null,
+                            "triggers": null
+                        },
+                        "sensitive_values": {
+                            "build": []
+                        }
+                    },
+                    {
+                        "address": "docker_network.app",
+                        "mode": "managed",
+                        "type": "docker_network",
+                        "name": "app",
+                        "provider_name": "registry.terraform.io/kreuzwerker/docker",
+                        "schema_version": 1,
+                        "values": {
+                            "attachable": false,
+                            "driver": "bridge",
+                            "id": "d7554f2a1cc0a120eaff7a39461d7dcf2b028e0d68419c7dd05c8eaa6eb03502",
+                            "ingress": false,
+                            "internal": false,
+                            "ipam_config": [
+                                {
+                                    "aux_address": {},
+                                    "gateway": "172.18.0.1",
+                                    "ip_range": "",
+                                    "subnet": "172.18.0.0/16"
+                                }
+                            ],
+                            "ipam_driver": "default",
+                            "ipam_options": {},
+                            "ipv6": false,
+                            "labels": [
+                                {
+                                    "label": "app",
+                                    "value": "driftpilot-demo"
+                                },
+                                {
+                                    "label": "managed-by",
+                                    "value": "terraform"
+                                }
+                            ],
+                            "name": "driftpilot-demo-net",
+                            "options": {
+                                "com.docker.network.enable_ipv4": "true",
+                                "com.docker.network.enable_ipv6": "false"
+                            },
+                            "scope": "local"
+                        },
+                        "sensitive_values": {
+                            "ipam_config": [
+                                {
+                                    "aux_address": {}
+                                }
+                            ],
+                            "ipam_options": {},
+                            "labels": [
+                                {},
+                                {}
+                            ],
+                            "options": {}
+                        }
+                    },
+                    {
+                        "address": "docker_volume.cache_data",
+                        "mode": "managed",
+                        "type": "docker_volume",
+                        "name": "cache_data",
+                        "provider_name": "registry.terraform.io/kreuzwerker/docker",
+                        "schema_version": 1,
+                        "values": {
+                            "cluster": [],
+                            "driver": "local",
+                            "driver_opts": {},
+                            "id": "driftpilot-demo-cache-data",
+                            "labels": [
+                                {
+                                    "label": "app",
+                                    "value": "driftpilot-demo"
+                                },
+                                {
+                                    "label": "managed-by",
+                                    "value": "terraform"
+                                }
+                            ],
+                            "mountpoint": "/var/lib/docker/volumes/driftpilot-demo-cache-data/_data",
+                            "name": "driftpilot-demo-cache-data"
+                        },
+                        "sensitive_values": {
+                            "cluster": [],
+                            "driver_opts": {},
+                            "labels": [
+                                {},
+                                {}
+                            ]
+                        }
+                    }
+                ]
+            }
+        }
+    },
+    "configuration": {
+        "provider_config": {
+            "docker": {
+                "name": "docker",
+                "full_name": "registry.terraform.io/kreuzwerker/docker",
+                "version_constraint": "~> 4.6"
+            }
+        },
+        "root_module": {
+            "resources": [
+                {
+                    "address": "docker_container.cache",
+                    "mode": "managed",
+                    "type": "docker_container",
+                    "name": "cache",
+                    "provider_config_key": "docker",
+                    "expressions": {
+                        "image": {
+                            "references": [
+                                "docker_image.redis.image_id",
+                                "docker_image.redis"
+                            ]
+                        },
+                        "memory": {
+                            "constant_value": 128
+                        },
+                        "memory_swap": {
+                            "constant_value": 256
+                        },
+                        "name": {
+                            "constant_value": "driftpilot-demo-cache"
+                        },
+                        "networks_advanced": [
+                            {
+                                "name": {
+                                    "references": [
+                                        "docker_network.app.id",
+                                        "docker_network.app"
+                                    ]
+                                }
+                            }
+                        ],
+                        "restart": {
+                            "constant_value": "unless-stopped"
+                        },
+                        "volumes": [
+                            {
+                                "container_path": {
+                                    "constant_value": "/data"
+                                },
+                                "volume_name": {
+                                    "references": [
+                                        "docker_volume.cache_data.name",
+                                        "docker_volume.cache_data"
+                                    ]
+                                }
+                            }
+                        ]
+                    },
+                    "schema_version": 2
+                },
+                {
+                    "address": "docker_container.web",
+                    "mode": "managed",
+                    "type": "docker_container",
+                    "name": "web",
+                    "provider_config_key": "docker",
+                    "expressions": {
+                        "image": {
+                            "references": [
+                                "docker_image.nginx.image_id",
+                                "docker_image.nginx"
+                            ]
+                        },
+                        "memory": {
+                            "constant_value": 256
+                        },
+                        "memory_swap": {
+                            "constant_value": 512
+                        },
+                        "name": {
+                            "constant_value": "driftpilot-demo-web"
+                        },
+                        "networks_advanced": [
+                            {
+                                "name": {
+                                    "references": [
+                                        "docker_network.app.id",
+                                        "docker_network.app"
+                                    ]
+                                }
+                            }
+                        ],
+                        "ports": [
+                            {
+                                "external": {
+                                    "constant_value": 8080
+                                },
+                                "internal": {
+                                    "constant_value": 80
+                                }
+                            }
+                        ],
+                        "restart": {
+                            "constant_value": "unless-stopped"
+                        }
+                    },
+                    "schema_version": 2
+                },
+                {
+                    "address": "docker_image.nginx",
+                    "mode": "managed",
+                    "type": "docker_image",
+                    "name": "nginx",
+                    "provider_config_key": "docker",
+                    "expressions": {
+                        "keep_locally": {
+                            "constant_value": true
+                        },
+                        "name": {
+                            "constant_value": "nginx:alpine"
+                        }
+                    },
+                    "schema_version": 0
+                },
+                {
+                    "address": "docker_image.redis",
+                    "mode": "managed",
+                    "type": "docker_image",
+                    "name": "redis",
+                    "provider_config_key": "docker",
+                    "expressions": {
+                        "keep_locally": {
+                            "constant_value": true
+                        },
+                        "name": {
+                            "constant_value": "redis:alpine"
+                        }
+                    },
+                    "schema_version": 0
+                },
+                {
+                    "address": "docker_network.app",
+                    "mode": "managed",
+                    "type": "docker_network",
+                    "name": "app",
+                    "provider_config_key": "docker",
+                    "expressions": {
+                        "name": {
+                            "constant_value": "driftpilot-demo-net"
+                        }
+                    },
+                    "schema_version": 1
+                },
+                {
+                    "address": "docker_volume.cache_data",
+                    "mode": "managed",
+                    "type": "docker_volume",
+                    "name": "cache_data",
+                    "provider_config_key": "docker",
+                    "expressions": {
+                        "name": {
+                            "constant_value": "driftpilot-demo-cache-data"
+                        }
+                    },
+                    "schema_version": 1
+                }
+            ]
+        }
+    },
+    "timestamp": "2026-10-24T18:06:25Z",
+    "applyable": true,
+    "complete": true,
+    "errored": false
+}
