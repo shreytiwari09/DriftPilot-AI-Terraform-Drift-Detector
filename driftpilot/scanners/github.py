@@ -2,10 +2,18 @@
 
 from typing import Any
 
-from driftpilot.models import ScannedResource
-from driftpilot.scanners.base import state_resources
+from driftpilot.models import ScannedResource, UnmanagedFinding
+from driftpilot.scanners.base import ImportTarget, state_resources, tf_name
 
 PROVIDER = "registry.terraform.io/integrations/github"
+
+
+def import_target(u: UnmanagedFinding) -> ImportTarget | None:
+    if u.resource_kind == "repository":  # github_repository imports by name
+        return ImportTarget("github_repository", u.name, tf_name(u.name))
+    if u.resource_kind == "team":  # github_team imports by numeric ID or slug
+        return ImportTarget("github_team", u.resource_id, tf_name(u.name))
+    return None
 
 
 class GitHubScanner:

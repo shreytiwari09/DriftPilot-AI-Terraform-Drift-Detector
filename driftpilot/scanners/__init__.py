@@ -3,7 +3,21 @@
 import os
 
 from driftpilot.config import Config
-from driftpilot.scanners.base import Scanner
+from driftpilot.models import UnmanagedFinding
+from driftpilot.scanners import docker as docker_scanner
+from driftpilot.scanners import github as github_scanner
+from driftpilot.scanners.base import ImportTarget, Scanner
+
+_IMPORT_TARGETS = {
+    docker_scanner.PROVIDER: docker_scanner.import_target,
+    github_scanner.PROVIDER: github_scanner.import_target,
+}
+
+
+def import_target(u: UnmanagedFinding) -> ImportTarget | None:
+    """How to import an unmanaged resource, or None if its provider/kind isn't supported."""
+    resolver = _IMPORT_TARGETS.get(u.provider)
+    return resolver(u) if resolver else None
 
 
 def build_scanners(config: Config) -> list[Scanner]:

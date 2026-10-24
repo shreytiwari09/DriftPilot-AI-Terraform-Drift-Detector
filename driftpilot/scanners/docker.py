@@ -2,11 +2,21 @@
 
 from typing import Any
 
-from driftpilot.models import ScannedResource
-from driftpilot.scanners.base import parse_timestamp, state_resources
+from driftpilot.models import ScannedResource, UnmanagedFinding
+from driftpilot.scanners.base import ImportTarget, parse_timestamp, state_resources, tf_name
 
 PROVIDER = "registry.terraform.io/kreuzwerker/docker"
 _MANAGED_TYPES = {"docker_container", "docker_network", "docker_volume"}
+_TF_TYPES = {
+    "container": "docker_container",
+    "network": "docker_network",
+    "volume": "docker_volume",
+}
+
+
+def import_target(u: UnmanagedFinding) -> ImportTarget | None:
+    tf_type = _TF_TYPES.get(u.resource_kind)
+    return ImportTarget(tf_type, u.resource_id, tf_name(u.name)) if tf_type else None
 
 
 class DockerScanner:

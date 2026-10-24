@@ -33,7 +33,7 @@ def trim_plan(text: str, max_lines: int = 40) -> str:
     return "\n".join(lines[-max_lines:])
 
 
-def _copy_workdir(src: Path, dst: Path) -> None:
+def copy_workdir(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns(".terraform"), symlinks=True)
     if (src / ".terraform").exists():  # reuse downloaded providers instead of re-running init
         (dst / ".terraform").symlink_to((src / ".terraform").resolve())
@@ -62,7 +62,7 @@ def verify_patch(
     """
     with tempfile.TemporaryDirectory(prefix="driftpilot-verify-") as tmp:
         work = Path(tmp) / "work"
-        _copy_workdir(working_dir, work)
+        copy_workdir(working_dir, work)
         for rel, content in files.items():
             (work / rel).parent.mkdir(parents=True, exist_ok=True)
             (work / rel).write_text(content)

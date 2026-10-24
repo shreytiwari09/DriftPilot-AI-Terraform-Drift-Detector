@@ -5,12 +5,32 @@ See SPEC §4.3.
 
 import re
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import datetime
 from fnmatch import fnmatch
 from typing import Any, Protocol
 
 from driftpilot.collector import finding_id
 from driftpilot.models import ScannedResource, UnmanagedFinding
+
+
+@dataclass(frozen=True)
+class ImportTarget:
+    """How to bring an unmanaged resource into Terraform."""
+
+    tf_type: str  # e.g. "github_repository"
+    import_id: str  # what `terraform import` expects for this type
+    name: str  # Terraform resource name, e.g. "demo_handmade"
+
+    @property
+    def address(self) -> str:
+        return f"{self.tf_type}.{self.name}"
+
+
+def tf_name(name: str) -> str:
+    """A valid Terraform resource name from a platform name: `demo-handmade` → `demo_handmade`."""
+    cleaned = re.sub(r"[^A-Za-z0-9_]", "_", name).strip("_").lower() or "resource"
+    return f"r_{cleaned}" if cleaned[0].isdigit() else cleaned
 
 
 class Scanner(Protocol):
