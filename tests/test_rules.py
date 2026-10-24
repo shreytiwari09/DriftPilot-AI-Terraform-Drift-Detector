@@ -102,6 +102,31 @@ def test_ordinary_changes_need_triage(load_fixture) -> None:
         assert findings and verdicts == {}, fixture
 
 
+def test_live_batch_a(load_fixture) -> None:
+    """Scenarios 2, 3, 5, 6, 7, 8 injected together on the real demo org."""
+    ids = rule_ids(load_fixture("github/batch_a_s2_s3_s5_s6_s7_s8"))
+    assert ids == {
+        "required_pull_request_reviews[0].required_approving_review_count": (
+            "github-required-approvals-reduced"
+        ),
+        "permission": "github-team-permission-admin",
+        "etag": "noise-etag",
+        "required_status_checks": None,
+        "description": None,
+        "has_issues": None,
+        "topics": None,
+    }
+
+
+def test_live_batch_b(load_fixture) -> None:
+    """Scenarios 1 and 4: protection deleted, demo-web archived (which also turns off alerts)."""
+    findings, verdicts = triage(load_fixture("github/batch_b_s1_s4"))
+    by_path = {(f.address, f.attribute_path): verdicts.get(f.id) for f in findings}
+    assert by_path[("github_branch_protection.api_main", None)].severity == "critical"
+    assert by_path[("github_repository.web", "archived")] is None
+    assert by_path[("github_repository.web", "vulnerability_alerts")] is None
+
+
 def test_list_reordered_and_json_equal_are_noise() -> None:
     assert rule_ids(
         one_change("github_repository", {"topics": ["a", "b"]}, {"topics": ["b", "a"]})
