@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from driftpilot.collector import (
+    managed_resource_count,
     parse_plan,
     refresh_only_plan,
     resource_values,
@@ -73,6 +74,7 @@ def run_scan(
     else:
         plan = json.loads(plan_json.read_text())
     result.findings = parse_plan(plan, result.run_id, now)
+    result.managed_resource_count = managed_resource_count(plan)
     result.verdicts = apply_rules(result.findings, load_rules(), resource_values(plan))
     result.unmanaged = _scan_unmanaged(
         result, config, working_dir, plan_json is not None, state_json

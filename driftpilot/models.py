@@ -72,6 +72,7 @@ class RemediationResult(BaseModel):
     pr_url: str | None = None
     issue_url: str | None = None
     plan_proof: str | None = None
+    finding_ids: list[str] = []  # every finding this one issue/PR covers (one per resource)
 
 
 class HistoryEvent(BaseModel):
@@ -85,6 +86,20 @@ class HistoryEvent(BaseModel):
     human_outcome: Literal["accepted", "overruled", "pending"] = "pending"
 
 
+class RunRecord(BaseModel):
+    """One line in runs.jsonl: a scan, even a clean one (events alone can't show clean runs)."""
+
+    run_id: str
+    timestamp: datetime
+    working_dir: str
+    finding_count: int  # real drift findings (noise excluded)
+    critical_count: int
+    distinct_resources: int  # resources with real drift
+    unmanaged_count: int
+    noise_count: int
+    managed_resource_count: int | None = None  # resources in state, for "% ever drifted"
+
+
 class ScanResult(BaseModel):
     """Everything one `driftpilot scan` produced."""
 
@@ -95,6 +110,7 @@ class ScanResult(BaseModel):
     unmanaged: list[UnmanagedFinding] = []
     verdicts: dict[str, Verdict] = {}  # keyed by finding id; missing = needs triage
     remediations: list[RemediationResult] = []
+    managed_resource_count: int | None = None
     errors: list[str] = []
 
     def verdict_for(self, finding_id: str) -> Verdict | None:

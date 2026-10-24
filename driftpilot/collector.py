@@ -70,6 +70,19 @@ def show_state(working_dir: Path, timeout: int = DEFAULT_TIMEOUT) -> dict[str, A
     return json.loads(shown.stdout)
 
 
+def managed_resource_count(plan: dict[str, Any]) -> int | None:
+    """Managed resources in the plan's prior state (all modules), or None if absent."""
+    root = (plan.get("prior_state") or {}).get("values", {}).get("root_module")
+    if root is None:
+        return None
+    count, modules = 0, [root]
+    while modules:
+        module = modules.pop()
+        count += sum(1 for r in module.get("resources", []) if r.get("mode") == "managed")
+        modules.extend(module.get("child_modules", []))
+    return count
+
+
 def finding_id(address: str, attribute_path: str | None) -> str:
     return hashlib.sha256(f"{address}|{attribute_path or ''}".encode()).hexdigest()[:12]
 

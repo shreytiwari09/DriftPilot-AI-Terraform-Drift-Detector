@@ -65,6 +65,7 @@ def run_remediations(
         outcomes.append(
             RemediationResult(
                 finding_id=plan.finding_ids[0],
+                finding_ids=plan.finding_ids,
                 action=plan.action,
                 verified=bool(patch and patch.verified),
                 attempts=patch.attempts if patch else 0,
