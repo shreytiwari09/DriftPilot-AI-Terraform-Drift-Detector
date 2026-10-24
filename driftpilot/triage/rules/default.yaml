@@ -1,0 +1,128 @@
+# DriftPilot default rule pack v1.
+#
+# Each rule: match (resource type / attribute globs, change kind) + optional `when` predicate -> verdict.
+# Globs: `*` matches anything; every other character is literal (so `[0]` is literal).
+# First matching rule wins, so noise rules come first. Findings no rule matches go to LLM triage.
+#
+# Predicates: null_to_default, list_reordered, json_equal, decreased,
+#             changed_to: <value>, open_cidr_on_admin_port
+
+version: 1
+
+rules:
+  # ---------- Noise: not real drift ----------
+  - id: noise-provider-defaults
+    description: Provider fills in a zero default (null -> [] / {} / "" / 0 / false) on refresh, usually right after apply.
+    match: { type: "*", attribute: "*", change_kind: modified }
+    when: null_to_default
+    verdict:
+      is_real_drift: false
+      severity: none
+      category: cosmetic
+      intent: likely_automation
+      recommended_action: none
+      confidence: 0.95
+      reason: The provider filled in an empty default value; nothing was changed by a person.
+
+  - id: noise-etag
+    description: HTTP caching fingerprint returned by the API, not configuration.
+    match: { type: "*", attribute: "etag" }
+    verdict:
+      is_real_drift: false
+      severity: none
+      category: cosmetic
+      intent: likely_automation
+      recommended_action: none
+      confidence: 0.99
+      reason: The etag is a caching fingerprint from the API, not a setting.
+
+  - id: noise-docker-network-data
+    description: Runtime network info (IP, gateway, MAC) changes whenever a container restarts.
+    match: { type: docker_container, attribute: "network_data*" }
+    verdict:
+      is_real_drift: false
+      severity: none
+      category: cosmetic
+      intent: likely_automation
+      recommended_action: none
+      confidence: 0.95
+      reason: Network addresses are assigned at runtime and change on every container restart.
+
+  - id: noise-list-reordered
+    description: Same list members in a different order.
+    match: { type: "*", attribute: "*", change_kind: modified }
+    when: list_reordered
+    verdict:
+      is_real_drift: false
+      severity: none
+      category: cosmetic
+      intent: likely_automation
+      recommended_action: none
+      confidence: 0.9
+      reason: The list has the same members in a different order.
+
+  - id: noise-json-equivalent
+    description: JSON documents (e.g. policies) equal after normalising whitespace and key order.
+    match: { type: "*", attribute: "*", change_kind: modified }
+    when: json_equal
+    verdict:
+      is_real_drift: false
+      severity: none
+      category: cosmetic
+      intent: likely_automation
+      recommended_action: none
+      confidence: 0.95
+      reason: The JSON document is unchanged apart from formatting or key order.
+
+  # ---------- Critical / high: real, dangerous drift ----------
+  - id: github-branch-protection-deleted
+    description: Branch protection removed outside Terraform.
+    match: { type: "github_branch_protection*", change_kind: deleted }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: Branch protection was deleted, so anyone with write access can push straight to the branch.
+
+  - id: github-required-approvals-reduced
+    description: Fewer required pull request approvals than the code says.
+    match: { type: "github_branch_protection*", attribute: "*required_approving_review_count" }
+    when: decreased
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: Required pull request approvals were lowered, so changes can merge with less review.
+
+  # SPEC §4.4 lists this under critical rules; the §7 scenario table (used as eval labels) says high.
+  - id: github-team-permission-admin
+    description: A team was given admin on a repository.
+    match: { type: github_team_repository, attribute: permission }
+    when: { changed_to: admin }
+    verdict:
+      is_real_drift: true
+      severity: high
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: A team was raised to admin, which lets its members change settings and protections.
+
+  - id: open-cidr-on-admin-port
+    description: SSH (22) or RDP (3389) opened to the whole internet.
+    match: { type: "aws_*security_group*", attribute: "*" }
+    when: open_cidr_on_admin_port
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: An admin port (SSH or RDP) is now open to 0.0.0.0/0, the whole internet.
