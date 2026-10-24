@@ -77,7 +77,8 @@ def action(
     result = _scan_or_exit(
         working_directory, config_path if config_path.exists() else None, None, None
     )
-    print_result(result, console)
+    # CI logs have no terminal, so rich would assume 80 columns and wrap every cell.
+    print_result(result, Console(width=200))
 
     summary = build_summary(result)
     if path := os.environ.get("GITHUB_STEP_SUMMARY"):
