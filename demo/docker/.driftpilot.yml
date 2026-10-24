@@ -1,0 +1,5 @@
+# DriftPilot settings for the local Docker demo.
+scanners:
+  docker:
+    managed_label: "managed-by=terraform"
+    ignore_names: []
