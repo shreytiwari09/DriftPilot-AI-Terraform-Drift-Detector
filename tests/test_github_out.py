@@ -102,6 +102,13 @@ def test_existing_issue_is_updated_not_duplicated() -> None:
     old.create_comment.assert_called_once()
 
 
+def test_values_shown_as_json() -> None:
+    from driftpilot.remediate.github_out import issue_body
+
+    body = issue_body(item(), None, None)
+    assert '`[]` → `[{"contexts": ["ci/hotfix-check"], "strict": false}]`' in body
+
+
 def test_pull_request_creates_branch_file_and_pr_with_proof() -> None:
     from github import UnknownObjectException
 

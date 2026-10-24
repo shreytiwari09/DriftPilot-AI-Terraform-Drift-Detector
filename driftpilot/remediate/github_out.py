@@ -3,6 +3,7 @@
 One open issue/PR per plan key; a hidden marker in the body finds it again on later runs.
 """
 
+import json
 import posixpath
 import re
 from dataclasses import dataclass
@@ -53,7 +54,7 @@ class Output(Protocol):
 
 
 def _cell(value: Any) -> str:
-    text = str(value) if not isinstance(value, str) else value
+    text = value if isinstance(value, str) else json.dumps(value, default=str)
     text = text if len(text) <= 80 else text[:79] + "…"
     return text.replace("|", "\\|").replace("\n", " ")
 
