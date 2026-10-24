@@ -117,14 +117,24 @@ def set_team_permission(permission: str) -> None:
 
 def s5_inject(_: argparse.Namespace) -> None:
     # Status checks aren't enabled on the rule yet, so the PATCH endpoint would 404;
-    # re-PUT the whole rule with the same approvals plus one check (an "incident" check).
-    main_branch().edit_protection(
-        strict=False, contexts=[HOTFIX_CHECK], required_approving_review_count=REQUIRED_APPROVALS
+    # re-PUT the whole rule with the *current* approvals plus one check (an "incident" check),
+    # so running it together with scenario 2 doesn't undo that one.
+    branch = main_branch()
+    approvals = branch.get_required_pull_request_reviews().required_approving_review_count
+    branch.edit_protection(
+        strict=False, contexts=[HOTFIX_CHECK], required_approving_review_count=approvals
     )
 
 
 def s5_revert(_: argparse.Namespace) -> None:
     main_branch().remove_required_status_checks()
+
+
+def s4_revert(_: argparse.Namespace) -> None:
+    web = repo(WEB_REPO)
+    web.edit(archived=False)
+    # Archiving also switches off vulnerability alerts, and unarchiving doesn't switch them back.
+    web.enable_vulnerability_alert()
 
 
 def s9_inject(_: argparse.Namespace) -> None:
@@ -176,8 +186,7 @@ SCENARIOS = {
         Scenario(3, "github", "Team developers access pull -> admin", "high / revert",
                  lambda _: set_team_permission("admin"), lambda _: set_team_permission("pull")),
         Scenario(4, "github", "demo-web archived", "high / investigate",
-                 lambda _: repo(WEB_REPO).edit(archived=True),
-                 lambda _: repo(WEB_REPO).edit(archived=False)),
+                 lambda _: repo(WEB_REPO).edit(archived=True), s4_revert),
         Scenario(5, "github", f"Required status check '{HOTFIX_CHECK}' added", "medium / codify",
                  s5_inject, s5_revert),
         Scenario(6, "github", "has_issues turned off on demo-api", "medium / codify or revert",
