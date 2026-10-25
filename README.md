@@ -31,12 +31,7 @@ Teams describe their infrastructure (servers, databases, firewalls, repository s
 **Terraform code**, the blueprint. People still change the real thing by hand: an urgent fix during an outage, a
 shortcut, a mistake. Reality then **drifts** away from the code.
 
-```mermaid
-flowchart LR
-  code["📄 Terraform code<br/>approvals = 2"] -->|"terraform apply"| real["☁️ Real infrastructure<br/>approvals = 0 ⚠️"]
-  person["🧑 Someone, by hand"] -.->|"changes 2 → 0"| real
-  real --- drift(["Drift: the code says 2, reality is 0"])
-```
+<p align="center"><img src="assets/diagrams/problem.png" alt="Terraform code says approvals = 2; someone changes it to 0 by hand; the real infrastructure now differs: drift" width="720"></p>
 
 Plain Terraform has four blind spots:
 
@@ -80,17 +75,7 @@ repository.
 
 ## How it works
 
-```mermaid
-flowchart TB
-  T["⏰ Triggers<br/>schedule · button · events"] --> P["terraform plan<br/>-refresh-only"]
-  P --> C["Collector<br/>one finding per<br/>changed setting"]
-  S["Scanners<br/>GitHub · Docker"] --> U["Unmanaged<br/>resources"]
-  C --> RD["🔒 Redaction"] --> RU["📏 Rules"] --> L["🤖 LLM triage"] --> PO["🛡️ Policy"]
-  U --> PO
-  PO -->|"risky / critical"| I["🎫 Issue<br/>preview + fix commands"]
-  PO -->|"keep the change"| V["Patch → fmt → validate → plan<br/>must show No changes"] --> PR["🔀 Pull request<br/>with plan proof"]
-  PO --> H["📈 History · analytics<br/>dashboard"]
-```
+<p align="center"><img src="assets/diagrams/pipeline.png" alt="DriftPilot pipeline: triggers, terraform plan, collector, redaction, rules, LLM triage, policy, then issue, verified pull request, or history" width="560"></p>
 
 **Three layers of judgment**
 

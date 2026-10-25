@@ -1,0 +1,9 @@
+flowchart TB
+  T["⏰ Triggers<br/>schedule · button · events"] --> P["terraform plan<br/>-refresh-only"]
+  P --> C["Collector<br/>one finding per<br/>changed setting"]
+  S["Scanners<br/>GitHub · Docker"] --> U["Unmanaged<br/>resources"]
+  C --> RD["🔒 Redaction"] --> RU["📏 Rules"] --> L["🤖 LLM triage"] --> PO["🛡️ Policy"]
+  U --> PO
+  PO -->|"risky / critical"| I["🎫 Issue<br/>preview + fix commands"]
+  PO -->|"keep the change"| V["Patch → fmt → validate → plan<br/>must show No changes"] --> PR["🔀 Pull request<br/>with plan proof"]
+  PO --> H["📈 History · analytics<br/>dashboard"]

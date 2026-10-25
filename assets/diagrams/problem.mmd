@@ -1,0 +1,4 @@
+flowchart LR
+  code["📄 Terraform code<br/>approvals = 2"] -->|"terraform apply"| real["☁️ Real infrastructure<br/>approvals = 0 ⚠️"]
+  person["🧑 Someone, by hand"] -.->|"changes 2 → 0"| real
+  real --- drift(["Drift: the code says 2, reality is 0"])
