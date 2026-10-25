@@ -1,0 +1,35 @@
+# Resources created outside Terraform (found by scanners, invisible to `terraform plan`).
+
+- id: unmanaged-github-repo
+  source: synthetic
+  scenario: 9
+  unmanaged: {provider: github, kind: repository, name: demo-handmade}
+  expect:
+    - real: true
+      severity: medium
+      action: [import]
+
+- id: unmanaged-github-team
+  source: synthetic
+  unmanaged: {provider: github, kind: team, name: on-call}
+  expect:
+    - real: true
+      severity: medium
+      action: [import]
+
+- id: unmanaged-docker-container
+  source: synthetic
+  scenario: 13
+  unmanaged: {provider: docker, kind: container, name: driftpilot-handmade}
+  expect:
+    - real: true
+      severity: medium
+      action: [import]
+
+- id: unmanaged-docker-volume
+  source: synthetic
+  unmanaged: {provider: docker, kind: volume, name: scratch-data}
+  expect:
+    - real: true
+      severity: medium
+      action: [import]

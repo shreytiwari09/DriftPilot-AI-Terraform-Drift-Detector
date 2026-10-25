@@ -1,0 +1,95 @@
+# Changes that are not real drift (besides the recorded noise fixtures in recorded.yaml).
+
+- id: noise-topics-reordered
+  source: synthetic
+  code_dir: demo/github
+  drift:
+    - address: github_repository.api
+      before: {name: demo-api, topics: [demo, driftpilot]}
+      after: {name: demo-api, topics: [driftpilot, demo]}
+  expect:
+    - attribute: topics
+      real: false
+      severity: none
+      action: [none]
+
+- id: noise-iam-policy-reformatted
+  source: synthetic
+  code: |
+    resource "aws_iam_policy" "reader" {
+      name   = "reader"
+      policy = jsonencode({ Version = "2012-10-17", Statement = [] })
+    }
+  drift:
+    - address: aws_iam_policy.reader
+      before: {name: reader, policy: '{"Version": "2012-10-17", "Statement": []}'}
+      after: {name: reader, policy: '{"Statement":[],"Version":"2012-10-17"}'}
+  expect:
+    - attribute: policy
+      real: false
+      severity: none
+      action: [none]
+
+- id: noise-sg-cidrs-reordered
+  source: synthetic
+  code: |
+    resource "aws_security_group" "app" {
+      name = "app"
+      ingress {
+        from_port   = 8080
+        to_port     = 8080
+        protocol    = "tcp"
+        cidr_blocks = ["10.0.0.0/8", "172.16.0.0/12"]
+      }
+    }
+  drift:
+    - address: aws_security_group.app
+      before: {name: app, ingress: [{from_port: 8080, to_port: 8080, protocol: tcp, cidr_blocks: [10.0.0.0/8, 172.16.0.0/12]}]}
+      after: {name: app, ingress: [{from_port: 8080, to_port: 8080, protocol: tcp, cidr_blocks: [172.16.0.0/12, 10.0.0.0/8]}]}
+  expect:
+    - attribute: ingress[0].cidr_blocks
+      real: false
+      severity: none
+      action: [none]
+
+- id: noise-null-to-false
+  source: synthetic
+  code: |
+    resource "aws_s3_bucket" "logs" {
+      bucket = "acme-logs"
+    }
+  drift:
+    - address: aws_s3_bucket.logs
+      before: {bucket: acme-logs, object_lock_enabled: null}
+      after: {bucket: acme-logs, object_lock_enabled: false}
+  expect:
+    - attribute: object_lock_enabled
+      real: false
+      severity: none
+      action: [none]
+
+- id: noise-etag-repo
+  source: synthetic
+  code_dir: demo/github
+  drift:
+    - address: github_repository.web
+      before: {name: demo-web, etag: 'W/"abc"'}
+      after: {name: demo-web, etag: 'W/"def"'}
+  expect:
+    - attribute: etag
+      real: false
+      severity: none
+      action: [none]
+
+- id: noise-network-data-ip
+  source: synthetic
+  code_dir: demo/docker
+  drift:
+    - address: docker_container.cache
+      before: {name: driftpilot-demo-cache, network_data: [{ip_address: 172.18.0.2, gateway: 172.18.0.1}]}
+      after: {name: driftpilot-demo-cache, network_data: [{ip_address: 172.18.0.3, gateway: 172.18.0.1}]}
+  expect:
+    - attribute: network_data[0].ip_address
+      real: false
+      severity: none
+      action: [none]

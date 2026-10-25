@@ -1,0 +1,476 @@
+# AWS-style resources, hand-built plan JSON (no AWS account needed; detection reads plan JSON the same way).
+
+- id: aws-sg-ssh-opened-to-world
+  source: synthetic
+  code: |
+    resource "aws_security_group" "admin" {
+      name = "admin"
+      ingress {
+        from_port   = 22
+        to_port     = 22
+        protocol    = "tcp"
+        cidr_blocks = ["10.0.0.0/8"]
+      }
+    }
+  drift:
+    - address: aws_security_group.admin
+      before: {name: admin, ingress: [{from_port: 22, to_port: 22, protocol: tcp, cidr_blocks: [10.0.0.0/8]}]}
+      after: {name: admin, ingress: [{from_port: 22, to_port: 22, protocol: tcp, cidr_blocks: [0.0.0.0/0]}]}
+  expect:
+    - attribute: ingress[0].cidr_blocks
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-sg-rdp-opened-to-world
+  source: synthetic
+  code: |
+    resource "aws_security_group" "windows" {
+      name = "windows"
+      ingress {
+        from_port   = 3389
+        to_port     = 3389
+        protocol    = "tcp"
+        cidr_blocks = ["192.168.1.0/24"]
+      }
+    }
+  drift:
+    - address: aws_security_group.windows
+      before: {name: windows, ingress: [{from_port: 3389, to_port: 3389, protocol: tcp, cidr_blocks: [192.168.1.0/24]}]}
+      after: {name: windows, ingress: [{from_port: 3389, to_port: 3389, protocol: tcp, cidr_blocks: [0.0.0.0/0]}]}
+  expect:
+    - attribute: ingress[0].cidr_blocks
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-sg-https-opened-to-world
+  source: synthetic
+  code: |
+    resource "aws_security_group" "web" {
+      name = "web"
+      ingress {
+        from_port   = 443
+        to_port     = 443
+        protocol    = "tcp"
+        cidr_blocks = ["10.0.0.0/8"]
+      }
+    }
+  drift:
+    - address: aws_security_group.web
+      before: {name: web, ingress: [{from_port: 443, to_port: 443, protocol: tcp, cidr_blocks: [10.0.0.0/8]}]}
+      after: {name: web, ingress: [{from_port: 443, to_port: 443, protocol: tcp, cidr_blocks: [0.0.0.0/0]}]}
+  expect:
+    - attribute: ingress[0].cidr_blocks
+      real: true
+      severity: high
+      action: [revert, investigate, codify]
+
+- id: aws-sg-all-ports-opened
+  source: synthetic
+  code: |
+    resource "aws_security_group" "internal" {
+      name = "internal"
+      ingress {
+        from_port   = 0
+        to_port     = 0
+        protocol    = "-1"
+        cidr_blocks = ["10.0.0.0/16"]
+      }
+    }
+  drift:
+    - address: aws_security_group.internal
+      before: {name: internal, ingress: [{from_port: 0, to_port: 0, protocol: "-1", cidr_blocks: [10.0.0.0/16]}]}
+      after: {name: internal, ingress: [{from_port: 0, to_port: 0, protocol: "-1", cidr_blocks: [0.0.0.0/0]}]}
+  expect:
+    - attribute: ingress[0].cidr_blocks
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-sg-rule-ssh-standalone
+  source: synthetic
+  code: |
+    resource "aws_vpc_security_group_ingress_rule" "ssh" {
+      security_group_id = "sg-0abc"
+      from_port         = 22
+      to_port           = 22
+      ip_protocol       = "tcp"
+      cidr_ipv4         = "10.1.0.0/16"
+    }
+  drift:
+    - address: aws_vpc_security_group_ingress_rule.ssh
+      before: {from_port: 22, to_port: 22, ip_protocol: tcp, cidr_ipv4: 10.1.0.0/16}
+      after: {from_port: 22, to_port: 22, ip_protocol: tcp, cidr_ipv4: 0.0.0.0/0}
+  expect:
+    - attribute: cidr_ipv4
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-sg-narrowed
+  source: synthetic
+  code: |
+    resource "aws_security_group" "app" {
+      name = "app"
+      ingress {
+        from_port   = 8080
+        to_port     = 8080
+        protocol    = "tcp"
+        cidr_blocks = ["10.0.0.0/8"]
+      }
+    }
+  drift:
+    - address: aws_security_group.app
+      before: {name: app, ingress: [{from_port: 8080, to_port: 8080, protocol: tcp, cidr_blocks: [10.0.0.0/8]}]}
+      after: {name: app, ingress: [{from_port: 8080, to_port: 8080, protocol: tcp, cidr_blocks: [10.20.0.0/16]}]}
+  expect:
+    - attribute: ingress[0].cidr_blocks
+      real: true
+      severity: medium
+      action: [codify, investigate]
+
+- id: aws-s3-public-access-block-off
+  source: synthetic
+  code: |
+    resource "aws_s3_bucket_public_access_block" "data" {
+      bucket                  = "acme-data"
+      block_public_acls       = true
+      block_public_policy     = true
+      ignore_public_acls      = true
+      restrict_public_buckets = true
+    }
+  drift:
+    - address: aws_s3_bucket_public_access_block.data
+      before: {bucket: acme-data, block_public_policy: true}
+      after: {bucket: acme-data, block_public_policy: false}
+  expect:
+    - attribute: block_public_policy
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-s3-encryption-removed
+  source: synthetic
+  code: |
+    resource "aws_s3_bucket_server_side_encryption_configuration" "data" {
+      bucket = "acme-data"
+      rule {
+        apply_server_side_encryption_by_default {
+          sse_algorithm = "aws:kms"
+        }
+      }
+    }
+  drift:
+    - address: aws_s3_bucket_server_side_encryption_configuration.data
+      actions: [delete]
+      before: {bucket: acme-data}
+      after: null
+  expect:
+    - attribute: null
+      real: true
+      severity: critical
+      action: [revert, recreate]
+
+- id: aws-s3-versioning-suspended
+  source: synthetic
+  code: |
+    resource "aws_s3_bucket_versioning" "data" {
+      bucket = "acme-data"
+      versioning_configuration {
+        status = "Enabled"
+      }
+    }
+  drift:
+    - address: aws_s3_bucket_versioning.data
+      before: {bucket: acme-data, versioning_configuration: [{status: Enabled}]}
+      after: {bucket: acme-data, versioning_configuration: [{status: Suspended}]}
+  expect:
+    - attribute: versioning_configuration[0].status
+      real: true
+      severity: high
+      action: [revert]
+
+- id: aws-s3-tags-edited
+  source: synthetic
+  code: |
+    resource "aws_s3_bucket" "logs" {
+      bucket = "acme-logs"
+      tags = {
+        team = "platform"
+      }
+    }
+  drift:
+    - address: aws_s3_bucket.logs
+      before: {bucket: acme-logs, tags: {team: platform}}
+      after: {bucket: acme-logs, tags: {team: platform, cost-center: "1234"}}
+  expect:
+    - attribute: tags.cost-center
+      real: true
+      severity: low
+      action: [codify, ignore_changes]
+
+- id: aws-iam-policy-wildcard
+  source: synthetic
+  code: |
+    resource "aws_iam_policy" "deploy" {
+      name   = "deploy"
+      policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Action = ["s3:GetObject"], Resource = "arn:aws:s3:::acme-data/*" }] })
+    }
+  drift:
+    - address: aws_iam_policy.deploy
+      before: {name: deploy, policy: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject"],"Resource":"arn:aws:s3:::acme-data/*"}]}'}
+      after: {name: deploy, policy: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"*","Resource":"*"}]}'}
+  expect:
+    - attribute: policy
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-iam-policy-narrowed
+  source: synthetic
+  code: |
+    resource "aws_iam_policy" "reader" {
+      name   = "reader"
+      policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Action = ["s3:GetObject", "s3:ListBucket"], Resource = "*" }] })
+    }
+  drift:
+    - address: aws_iam_policy.reader
+      before: {name: reader, policy: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject","s3:ListBucket"],"Resource":"*"}]}'}
+      after: {name: reader, policy: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":["s3:GetObject"],"Resource":"*"}]}'}
+  expect:
+    - attribute: policy
+      real: true
+      severity: medium
+      action: [codify, investigate]
+
+- id: aws-iam-user-admin-attached
+  source: synthetic
+  code: |
+    resource "aws_iam_user_policy_attachment" "ci" {
+      user       = "ci-bot"
+      policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+    }
+  drift:
+    - address: aws_iam_user_policy_attachment.ci
+      before: {user: ci-bot, policy_arn: "arn:aws:iam::aws:policy/ReadOnlyAccess"}
+      after: {user: ci-bot, policy_arn: "arn:aws:iam::aws:policy/AdministratorAccess"}
+  expect:
+    - attribute: policy_arn
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-instance-type-upsized
+  source: synthetic
+  code: |
+    resource "aws_instance" "api" {
+      ami           = "ami-0abc"
+      instance_type = "t3.small"
+    }
+  drift:
+    - address: aws_instance.api
+      before: {ami: ami-0abc, instance_type: t3.small}
+      after: {ami: ami-0abc, instance_type: t3.xlarge}
+  expect:
+    - attribute: instance_type
+      real: true
+      severity: medium
+      action: [codify, investigate, revert]
+
+- id: aws-instance-tags-edited
+  source: synthetic
+  code: |
+    resource "aws_instance" "api" {
+      ami           = "ami-0abc"
+      instance_type = "t3.small"
+      tags = {
+        Name = "api"
+      }
+    }
+  drift:
+    - address: aws_instance.api
+      before: {ami: ami-0abc, instance_type: t3.small, tags: {Name: api}}
+      after: {ami: ami-0abc, instance_type: t3.small, tags: {Name: api-prod}}
+  expect:
+    - attribute: tags.Name
+      real: true
+      severity: low
+      action: [codify, ignore_changes]
+
+- id: aws-instance-public-ip
+  source: synthetic
+  code: |
+    resource "aws_instance" "db_proxy" {
+      ami                         = "ami-0abc"
+      instance_type               = "t3.small"
+      associate_public_ip_address = false
+    }
+  drift:
+    - address: aws_instance.db_proxy
+      before: {ami: ami-0abc, associate_public_ip_address: false}
+      after: {ami: ami-0abc, associate_public_ip_address: true}
+  expect:
+    - attribute: associate_public_ip_address
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-rds-public
+  source: synthetic
+  code: |
+    resource "aws_db_instance" "main" {
+      identifier          = "main"
+      instance_class      = "db.t3.medium"
+      publicly_accessible = false
+    }
+  drift:
+    - address: aws_db_instance.main
+      before: {identifier: main, publicly_accessible: false}
+      after: {identifier: main, publicly_accessible: true}
+  expect:
+    - attribute: publicly_accessible
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-rds-backup-retention-zero
+  source: synthetic
+  code: |
+    resource "aws_db_instance" "main" {
+      identifier              = "main"
+      instance_class          = "db.t3.medium"
+      backup_retention_period = 7
+    }
+  drift:
+    - address: aws_db_instance.main
+      before: {identifier: main, backup_retention_period: 7}
+      after: {identifier: main, backup_retention_period: 0}
+  expect:
+    - attribute: backup_retention_period
+      real: true
+      severity: high
+      action: [revert]
+
+- id: aws-rds-deletion-protection-off
+  source: synthetic
+  code: |
+    resource "aws_db_instance" "main" {
+      identifier          = "main"
+      instance_class      = "db.t3.medium"
+      deletion_protection = true
+    }
+  drift:
+    - address: aws_db_instance.main
+      before: {identifier: main, deletion_protection: true}
+      after: {identifier: main, deletion_protection: false}
+  expect:
+    - attribute: deletion_protection
+      real: true
+      severity: high
+      action: [revert]
+
+- id: aws-rds-instance-class
+  source: synthetic
+  code: |
+    resource "aws_db_instance" "main" {
+      identifier     = "main"
+      instance_class = "db.t3.medium"
+    }
+  drift:
+    - address: aws_db_instance.main
+      before: {identifier: main, instance_class: db.t3.medium}
+      after: {identifier: main, instance_class: db.r6g.large}
+  expect:
+    - attribute: instance_class
+      real: true
+      severity: medium
+      action: [codify, investigate]
+
+- id: aws-cloudtrail-logging-off
+  source: synthetic
+  code: |
+    resource "aws_cloudtrail" "main" {
+      name           = "main"
+      s3_bucket_name = "acme-trail"
+      enable_logging = true
+    }
+  drift:
+    - address: aws_cloudtrail.main
+      before: {name: main, enable_logging: true}
+      after: {name: main, enable_logging: false}
+  expect:
+    - attribute: enable_logging
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-ebs-volume-deleted
+  source: synthetic
+  code: |
+    resource "aws_ebs_volume" "data" {
+      availability_zone = "eu-west-1a"
+      size              = 100
+    }
+  drift:
+    - address: aws_ebs_volume.data
+      actions: [delete]
+      before: {availability_zone: eu-west-1a, size: 100}
+      after: null
+  expect:
+    - attribute: null
+      real: true
+      severity: high
+      action: [recreate, investigate]
+
+- id: aws-asg-max-raised
+  source: synthetic
+  code: |
+    resource "aws_autoscaling_group" "web" {
+      name     = "web"
+      min_size = 2
+      max_size = 4
+    }
+  drift:
+    - address: aws_autoscaling_group.web
+      before: {name: web, min_size: 2, max_size: 4}
+      after: {name: web, min_size: 2, max_size: 10}
+  expect:
+    - attribute: max_size
+      real: true
+      severity: medium
+      action: [codify, investigate]
+
+- id: aws-lambda-timeout-raised
+  source: synthetic
+  code: |
+    resource "aws_lambda_function" "worker" {
+      function_name = "worker"
+      timeout       = 30
+    }
+  drift:
+    - address: aws_lambda_function.worker
+      before: {function_name: worker, timeout: 30}
+      after: {function_name: worker, timeout: 120}
+  expect:
+    - attribute: timeout
+      real: true
+      severity: medium
+      action: [codify]
+
+- id: aws-kms-rotation-off
+  source: synthetic
+  code: |
+    resource "aws_kms_key" "data" {
+      description         = "data key"
+      enable_key_rotation = true
+    }
+  drift:
+    - address: aws_kms_key.data
+      before: {description: data key, enable_key_rotation: true}
+      after: {description: data key, enable_key_rotation: false}
+  expect:
+    - attribute: enable_key_rotation
+      real: true
+      severity: high
+      action: [revert]

@@ -1,0 +1,244 @@
+# Variants of the GitHub scenarios: other values, increases vs decreases, other settings.
+
+- id: gh-approvals-2-to-1
+  source: synthetic
+  scenario: 2
+  code_dir: demo/github
+  drift:
+    - address: github_branch_protection.api_main
+      before: {pattern: main, required_pull_request_reviews: [{required_approving_review_count: 2}]}
+      after: {pattern: main, required_pull_request_reviews: [{required_approving_review_count: 1}]}
+  expect:
+    - attribute: required_pull_request_reviews[0].required_approving_review_count
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: gh-approvals-2-to-3-stricter
+  source: synthetic
+  code_dir: demo/github
+  drift:
+    - address: github_branch_protection.api_main
+      before: {pattern: main, required_pull_request_reviews: [{required_approving_review_count: 2}]}
+      after: {pattern: main, required_pull_request_reviews: [{required_approving_review_count: 3}]}
+  expect:
+    - attribute: required_pull_request_reviews[0].required_approving_review_count
+      real: true
+      severity: medium
+      action: [codify]
+
+- id: gh-dismiss-stale-reviews-off
+  source: synthetic
+  code_dir: demo/github
+  drift:
+    - address: github_branch_protection.api_main
+      before: {pattern: main, required_pull_request_reviews: [{dismiss_stale_reviews: true}]}
+      after: {pattern: main, required_pull_request_reviews: [{dismiss_stale_reviews: false}]}
+  expect:
+    - attribute: required_pull_request_reviews[0].dismiss_stale_reviews
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: gh-enforce-admins-on-stricter
+  source: synthetic
+  code_dir: demo/github
+  drift:
+    - address: github_branch_protection.api_main
+      before: {pattern: main, enforce_admins: false}
+      after: {pattern: main, enforce_admins: true}
+  expect:
+    - attribute: enforce_admins
+      real: true
+      severity: medium
+      action: [codify]
+
+- id: gh-force-push-allowed
+  source: synthetic
+  code_dir: demo/github
+  drift:
+    - address: github_branch_protection.api_main
+      before: {pattern: main, allows_force_pushes: false}
+      after: {pattern: main, allows_force_pushes: true}
+  expect:
+    - attribute: allows_force_pushes
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: gh-protection-deletions-allowed
+  source: synthetic
+  code_dir: demo/github
+  drift:
+    - address: github_branch_protection.api_main
+      before: {pattern: main, allows_deletions: false}
+      after: {pattern: main, allows_deletions: true}
+  expect:
+    - attribute: allows_deletions
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: gh-team-pull-to-push
+  source: synthetic
+  scenario: 3
+  code_dir: demo/github
+  drift:
+    - address: github_team_repository.developers_api
+      before: {repository: demo-api, permission: pull}
+      after: {repository: demo-api, permission: push}
+  expect:
+    - attribute: permission
+      real: true
+      severity: high
+      action: [revert, investigate]
+
+- id: gh-team-pull-to-maintain
+  source: synthetic
+  scenario: 3
+  code_dir: demo/github
+  drift:
+    - address: github_team_repository.developers_api
+      before: {repository: demo-api, permission: pull}
+      after: {repository: demo-api, permission: maintain}
+  expect:
+    - attribute: permission
+      real: true
+      severity: high
+      action: [revert, investigate]
+
+- id: gh-team-admin-to-pull-downgrade
+  source: synthetic
+  code_dir: demo/github
+  drift:
+    - address: github_team_repository.developers_api
+      before: {repository: demo-api, permission: admin}
+      after: {repository: demo-api, permission: pull}
+  expect:
+    - attribute: permission
+      real: true
+      severity: medium
+      action: [codify, investigate]
+
+- id: gh-repo-api-archived
+  source: synthetic
+  scenario: 4
+  code_dir: demo/github
+  drift:
+    - address: github_repository.api
+      before: {name: demo-api, archived: false}
+      after: {name: demo-api, archived: true}
+  expect:
+    - attribute: archived
+      real: true
+      severity: high
+      action: [investigate, revert]
+
+- id: gh-repo-made-private
+  source: synthetic
+  code_dir: demo/github
+  drift:
+    - address: github_repository.web
+      before: {name: demo-web, visibility: public}
+      after: {name: demo-web, visibility: private}
+  expect:
+    - attribute: visibility
+      real: true
+      severity: high
+      action: [investigate, revert]
+
+- id: gh-has-wiki-on
+  source: synthetic
+  scenario: 6
+  code_dir: demo/github
+  drift:
+    - address: github_repository.web
+      before: {name: demo-web, has_wiki: false}
+      after: {name: demo-web, has_wiki: true}
+  expect:
+    - attribute: has_wiki
+      real: true
+      severity: medium
+      action: [codify, revert]
+
+- id: gh-delete-branch-on-merge
+  source: synthetic
+  code_dir: demo/github
+  drift:
+    - address: github_repository.web
+      before: {name: demo-web, delete_branch_on_merge: false}
+      after: {name: demo-web, delete_branch_on_merge: true}
+  expect:
+    - attribute: delete_branch_on_merge
+      real: true
+      severity: medium
+      action: [codify]
+
+- id: gh-web-description
+  source: synthetic
+  scenario: 7
+  code_dir: demo/github
+  drift:
+    - address: github_repository.web
+      before: {name: demo-web, description: DriftPilot demo frontend (managed by Terraform)}
+      after: {name: demo-web, description: Frontend for the demo app}
+  expect:
+    - attribute: description
+      real: true
+      severity: low
+      action: [codify]
+
+- id: gh-web-homepage
+  source: synthetic
+  code_dir: demo/github
+  drift:
+    - address: github_repository.web
+      before: {name: demo-web, homepage_url: ""}
+      after: {name: demo-web, homepage_url: https://demo.example.com}
+  expect:
+    - attribute: homepage_url
+      real: true
+      severity: low
+      action: [codify]
+
+- id: gh-web-topics-removed
+  source: synthetic
+  scenario: 8
+  code_dir: demo/github
+  drift:
+    - address: github_repository.web
+      before: {name: demo-web, topics: [demo, driftpilot]}
+      after: {name: demo-web, topics: [demo]}
+  expect:
+    - attribute: topics
+      real: true
+      severity: low
+      action: [codify]
+
+- id: gh-web-protection-deleted
+  source: synthetic
+  scenario: 1
+  code_dir: demo/github
+  drift:
+    - address: github_branch_protection.api_main
+      actions: [delete]
+      before: {pattern: main, required_pull_request_reviews: [{required_approving_review_count: 2}]}
+      after: null
+  expect:
+    - attribute: null
+      real: true
+      severity: critical
+      action: [revert, recreate]
+
+- id: gh-team-privacy-secret
+  source: synthetic
+  code_dir: demo/github
+  drift:
+    - address: github_team.developers
+      before: {name: developers, privacy: closed}
+      after: {name: developers, privacy: secret}
+  expect:
+    - attribute: privacy
+      real: true
+      severity: medium
+      action: [codify, revert]

@@ -1,0 +1,178 @@
+# Plans recorded from the real demo environments (Phases 0-2).
+
+- id: rec-gh-s2-approvals-2-to-0
+  source: recorded
+  scenario: 2
+  fixture: github/s2_required_approvals_reduced
+  code_dir: demo/github
+  expect:
+    - attribute: required_pull_request_reviews[0].required_approving_review_count
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: rec-gh-batch-a
+  source: recorded
+  scenario: [2, 3, 5, 6, 7, 8]
+  fixture: github/batch_a_s2_s3_s5_s6_s7_s8
+  code_dir: demo/github
+  expect:
+    - address: github_branch_protection.api_main
+      attribute: required_pull_request_reviews[0].required_approving_review_count
+      real: true
+      severity: critical
+      action: [revert]
+    - address: github_branch_protection.api_main
+      attribute: required_status_checks
+      real: true
+      severity: medium
+      action: [codify]
+    - address: github_repository.api
+      attribute: description
+      real: true
+      severity: low
+      action: [codify]
+    - address: github_repository.api
+      attribute: has_issues
+      real: true
+      severity: medium
+      action: [codify, revert]
+    - address: github_repository.api
+      attribute: topics
+      real: true
+      severity: low
+      action: [codify]
+    - address: github_team_repository.developers_api
+      attribute: permission
+      real: true
+      severity: high
+      action: [revert, investigate]
+    - address: github_team.developers
+      attribute: etag
+      real: false
+      severity: none
+      action: [none]
+    - address: github_team_repository.developers_api
+      attribute: etag
+      real: false
+      severity: none
+      action: [none]
+
+- id: rec-gh-batch-b
+  source: recorded
+  scenario: [1, 4]
+  fixture: github/batch_b_s1_s4
+  code_dir: demo/github
+  expect:
+    - address: github_branch_protection.api_main
+      attribute: null
+      real: true
+      severity: critical
+      action: [revert, recreate]
+    - address: github_repository.web
+      attribute: archived
+      real: true
+      severity: high
+      action: [investigate, revert]
+    - address: github_repository.web
+      attribute: vulnerability_alerts
+      real: true
+      severity: critical
+      action: [revert, investigate]
+    - address: github_team_repository.developers_api
+      attribute: etag
+      real: false
+      severity: none
+      action: [none]
+
+- id: rec-gh-control
+  source: recorded
+  scenario: 14
+  fixture: github/control_no_change
+  expect: []
+
+- id: rec-docker-s10-cache-removed
+  source: recorded
+  scenario: 10
+  fixture: docker/s10_container_removed
+  code_dir: demo/docker
+  expect:
+    - attribute: null
+      real: true
+      severity: high
+      action: [recreate]
+
+- id: rec-docker-s11-memory
+  source: recorded
+  scenario: 11
+  fixture: docker/s11_memory_changed
+  code_dir: demo/docker
+  expect:
+    - attribute: memory
+      real: true
+      severity: medium
+      action: [codify, revert]
+    - attribute: memory_swap
+      real: true
+      severity: medium
+      action: [codify, revert]
+
+- id: rec-docker-s12-restart
+  source: recorded
+  scenario: 12
+  fixture: docker/s12_restart_policy_changed
+  code_dir: demo/docker
+  expect:
+    - attribute: restart
+      real: true
+      severity: medium
+      action: [codify]
+    - attribute: max_retry_count
+      real: true
+      severity: medium
+      action: [codify]
+
+- id: rec-docker-cpu-shares
+  source: recorded
+  fixture: docker/extra_cpu_shares_changed
+  code_dir: demo/docker
+  expect:
+    - attribute: cpu_shares
+      real: true
+      severity: medium
+      action: [codify, revert]
+
+- id: rec-docker-container-stopped
+  source: recorded
+  fixture: docker/extra_container_stopped
+  code_dir: demo/docker
+  default: noise  # runtime data and provider defaults that come with a stopped container
+  expect:
+    - attribute: must_run
+      real: true
+      severity: high
+      action: [revert, investigate]
+
+- id: rec-docker-control
+  source: recorded
+  scenario: 14
+  fixture: docker/control_no_change
+  expect: []
+
+- id: rec-noise-docker-first-refresh
+  source: recorded
+  fixture: docker/noise_provider_defaults_after_apply
+  default: noise
+  expect: []
+
+- id: rec-noise-docker-restart-mac
+  source: recorded
+  fixture: docker/noise_mac_address_after_restart
+  default: noise
+  expect: []
+
+- id: rec-noise-github-first-refresh
+  source: recorded
+  fixture: github/noise_provider_defaults_after_apply
+  default: noise
+  expect: []

@@ -1,0 +1,103 @@
+# Variants of the Docker scenarios.
+
+- id: docker-web-memory-lowered
+  source: synthetic
+  scenario: 11
+  code_dir: demo/docker
+  drift:
+    - address: docker_container.web
+      before: {name: driftpilot-demo-web, memory: 256, memory_swap: 512}
+      after: {name: driftpilot-demo-web, memory: 128, memory_swap: 256}
+  expect:
+    - attribute: memory
+      real: true
+      severity: medium
+      action: [revert, codify, investigate]
+    - attribute: memory_swap
+      real: true
+      severity: medium
+      action: [revert, codify, investigate]
+
+- id: docker-cache-memory-raised
+  source: synthetic
+  scenario: 11
+  code_dir: demo/docker
+  drift:
+    - address: docker_container.cache
+      before: {name: driftpilot-demo-cache, memory: 128}
+      after: {name: driftpilot-demo-cache, memory: 512}
+  expect:
+    - attribute: memory
+      real: true
+      severity: medium
+      action: [codify, revert]
+
+- id: docker-restart-no
+  source: synthetic
+  scenario: 12
+  code_dir: demo/docker
+  drift:
+    - address: docker_container.cache
+      before: {name: driftpilot-demo-cache, restart: unless-stopped}
+      after: {name: driftpilot-demo-cache, restart: "no"}
+  expect:
+    - attribute: restart
+      real: true
+      severity: medium
+      action: [revert, investigate]
+
+- id: docker-restart-always
+  source: synthetic
+  scenario: 12
+  code_dir: demo/docker
+  drift:
+    - address: docker_container.web
+      before: {name: driftpilot-demo-web, restart: unless-stopped}
+      after: {name: driftpilot-demo-web, restart: always}
+  expect:
+    - attribute: restart
+      real: true
+      severity: medium
+      action: [codify]
+
+- id: docker-web-removed
+  source: synthetic
+  scenario: 10
+  code_dir: demo/docker
+  drift:
+    - address: docker_container.web
+      actions: [delete]
+      before: {name: driftpilot-demo-web, memory: 256}
+      after: null
+  expect:
+    - attribute: null
+      real: true
+      severity: high
+      action: [recreate]
+
+- id: docker-network-removed
+  source: synthetic
+  code_dir: demo/docker
+  drift:
+    - address: docker_network.app
+      actions: [delete]
+      before: {name: driftpilot-demo-net}
+      after: null
+  expect:
+    - attribute: null
+      real: true
+      severity: high
+      action: [recreate]
+
+- id: docker-cpu-shares-lowered
+  source: synthetic
+  code_dir: demo/docker
+  drift:
+    - address: docker_container.web
+      before: {name: driftpilot-demo-web, cpu_shares: 0}
+      after: {name: driftpilot-demo-web, cpu_shares: 128}
+  expect:
+    - attribute: cpu_shares
+      real: true
+      severity: medium
+      action: [codify, revert]
