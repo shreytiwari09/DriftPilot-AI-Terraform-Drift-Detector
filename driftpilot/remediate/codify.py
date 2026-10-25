@@ -7,7 +7,13 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from driftpilot.hcl import add_ignore_changes, find_block, replace_block
+from driftpilot.hcl import (
+    add_ignore_changes,
+    find_block,
+    find_owner_block,
+    module_name,
+    replace_block,
+)
 from driftpilot.models import DriftFinding
 from driftpilot.remediate.verify import verify_patch
 from driftpilot.triage.llm import LLMClient, LLMError, ask
@@ -40,19 +46,23 @@ def codify(
         return Patch(False, {}, "", 0, "refused: a changed value is sensitive and was redacted")
     if any(f.change_kind == "deleted" for f in findings):
         return Patch(False, {}, "", 0, "refused: the resource was deleted; recreate it instead")
-    block = find_block(working_dir, address)
-    if block is None:
-        return Patch(False, {}, "", 0, f"no resource block found for {address}")
+    owner = find_owner_block(working_dir, address)
+    if owner is None:
+        return Patch(False, {}, "", 0, f"no resource block or module call found for {address}")
+    block, is_module_call = owner
 
     version, system = load_prompt("codify")
     request = {
-        "resource_block": block.text,
+        "block_kind": "module_call" if is_module_call else "resource",
+        "resource_address": address,
+        "block": block.text,
         "settings": [
             {"path": f.attribute_path, "code_value": f.before, "real_value": f.after}
             for f in findings
         ],
     }
     prompt = "Update this block:\n" + json.dumps(request, indent=2, default=str)
+    first_line = block.text.split("{", 1)[0].strip()  # e.g. `module "billing"`
     rel = _relative(block.path, working_dir)
     last = Patch(False, {}, "", 0, "")
     for attempt in range(1, max_retries + 1):
@@ -62,8 +72,8 @@ def codify(
         except (LLMError, ValidationError) as e:
             last = Patch(False, {}, str(e)[:500], attempt, f"{version}: no usable answer")
             continue
-        if not re.match(rf'\s*resource\s+"{re.escape(findings[0].resource_type)}"', new_block):
-            feedback = "The answer must be the complete resource block, starting with `resource`."
+        if new_block.split("{", 1)[0].split() != first_line.split():
+            feedback = f"The answer must be the complete block, starting with `{first_line} {{`."
             last = Patch(False, {}, feedback, attempt, f"{version}: wrong shape")
         else:
             files = {rel: replace_block(block, new_block)}
@@ -78,6 +88,11 @@ def codify(
 
 def ignore_changes(working_dir: Path, findings: list[DriftFinding]) -> Patch:
     """Add the drifted top-level attributes to `lifecycle.ignore_changes`; verify."""
+    if module_name(findings[0].address):
+        # lifecycle can't be set from a module call; the module's own code would need changing.
+        return Patch(
+            False, {}, "", 0, "refused: ignore_changes can't be set on a module's resource"
+        )
     block = find_block(working_dir, findings[0].address)
     if block is None:
         return Patch(False, {}, "", 0, f"no resource block found for {findings[0].address}")

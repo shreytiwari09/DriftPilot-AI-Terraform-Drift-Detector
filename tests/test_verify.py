@@ -96,3 +96,12 @@ def test_trim_plan_drops_refresh_noise_and_warning_boxes() -> None:
         "Terraform specifically suggests to use it as part of an error message.\n"
     )
     assert trim_plan(plain) == "No changes."
+
+
+def test_trim_plan_stops_at_module_deprecation_warning() -> None:
+    text = (
+        "No changes. Your infrastructure matches the configuration.\n\n"
+        "Warning: Argument is deprecated\n\n  with module.billing.github_repository.default[0],\n"
+        "  on .terraform/modules/billing/main.tf line 56\n"
+    )
+    assert trim_plan(text) == "No changes. Your infrastructure matches the configuration."

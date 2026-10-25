@@ -54,6 +54,12 @@ def _block_end(text: str, open_brace: int) -> int:
     raise ValueError("unbalanced braces")
 
 
+def module_name(address: str) -> str | None:
+    """`module.billing.github_repository.default[0]` → "billing" (the call in this directory)."""
+    match = re.match(r"module\.([A-Za-z0-9_-]+)(?:\[[^\]]*\])?\.", address)
+    return match.group(1) if match else None
+
+
 def find_block(directory: Path, address: str) -> Block | None:
     """The resource block for `address` in `directory/*.tf`, or None."""
     split = _split_address(address)
@@ -63,6 +69,27 @@ def find_block(directory: Path, address: str) -> Block | None:
     header = re.compile(
         rf'^[ \t]*resource\s+"{re.escape(rtype)}"\s+"{re.escape(name)}"\s*\{{', re.M
     )
+    return _find(directory, header)
+
+
+def find_module_call(directory: Path, name: str) -> Block | None:
+    """The `module "<name>" { ... }` block in `directory/*.tf`, or None."""
+    return _find(directory, re.compile(rf'^[ \t]*module\s+"{re.escape(name)}"\s*\{{', re.M))
+
+
+def find_owner_block(directory: Path, address: str) -> tuple[Block, bool] | None:
+    """The code to edit for `address`: its resource block, or the module call that creates it.
+
+    Returns (block, is_module_call).
+    """
+    if (name := module_name(address)) is not None:
+        block = find_module_call(directory, name)
+        return (block, True) if block else None
+    block = find_block(directory, address)
+    return (block, False) if block else None
+
+
+def _find(directory: Path, header: re.Pattern[str]) -> Block | None:
     for path in sorted(directory.glob("*.tf")):
         text = path.read_text()
         if m := header.search(text):

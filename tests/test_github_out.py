@@ -191,3 +191,18 @@ def test_runner_records_failures_and_continues(monkeypatch, scan_result, tmp_pat
 
     results = run_remediations(scan_result, Config(), object(), tmp_path, Broken())
     assert results == [] and "GitHub is down" in scan_result.errors[0]
+
+
+def test_revert_command_is_shell_safe_for_module_addresses() -> None:
+    import shlex
+
+    f = finding("m", 'module.billing.github_repository_ruleset.default["main"]', "enforcement")
+    f.resource_type = "github_repository_ruleset"
+    cmd = revert_command(item("revert", findings=[f]), "infra")
+    assert cmd == (
+        "cd infra && terraform apply "
+        "'-target=module.billing.github_repository_ruleset.default[\"main\"]'"
+    )
+    assert (
+        shlex.split(cmd)[-1] == '-target=module.billing.github_repository_ruleset.default["main"]'
+    )

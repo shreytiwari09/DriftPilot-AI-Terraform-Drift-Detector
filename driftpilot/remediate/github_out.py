@@ -6,6 +6,7 @@ One open issue/PR per plan key; a hidden marker in the body finds it again on la
 import json
 import posixpath
 import re
+import shlex
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -80,8 +81,9 @@ def _changes_table(item: Item) -> str:
 
 def revert_command(item: Item, working_dir: str) -> str:
     flag = "-replace" if any(needs_replace_to_revert(f) for f in item.findings) else "-target"
-    cd = f"cd {working_dir} && " if working_dir not in ("", ".") else ""
-    return f"{cd}terraform apply {flag}={item.plan.address}"
+    cd = f"cd {shlex.quote(working_dir)} && " if working_dir not in ("", ".") else ""
+    # Quoted: module addresses like module.x.y["main"] contain brackets and quotes.
+    return f"{cd}terraform apply {shlex.quote(f'{flag}={item.plan.address}')}"
 
 
 def _patch_section(patch: Patch) -> str:

@@ -25,11 +25,14 @@ class VerifyResult:
     files: dict[str, str] = field(default_factory=dict)  # formatted contents, by relative path
 
 
-_TARGET_WARNING = re.compile(r"Warning: Resource targeting is in effect.*?error message\.", re.S)
+_WARNINGS = re.compile(r"^\s*[╷│]?\s*Warning:", re.M)
 
 
 def trim_plan(text: str, max_lines: int = 40) -> str:
-    text = _TARGET_WARNING.sub("", text)
+    # Terraform prints warnings (e.g. -target in effect, a module's deprecated arguments) after
+    # its summary; they aren't part of the proof.
+    if match := _WARNINGS.search(text):
+        text = text[: match.start()]
     lines = [
         ln
         for ln in text.splitlines()

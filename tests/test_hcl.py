@@ -70,3 +70,14 @@ def test_add_ignore_changes_to_lifecycle_without_list() -> None:
     block = 'resource "x" "a" {\n  lifecycle {\n    prevent_destroy = true\n  }\n}'
     out = add_ignore_changes(block, "restart")
     assert "ignore_changes = [restart]" in out and "prevent_destroy = true" in out
+
+
+def test_module_owner_block(tmp_path: Path) -> None:
+    from driftpilot.hcl import find_owner_block, module_name
+
+    (tmp_path / "main.tf").write_text('module "billing" {\n  name = "x"\n}\n')
+    assert module_name('module.billing.github_repository_ruleset.default["main"]') == "billing"
+    assert module_name("github_repository.api") is None
+    block, is_module = find_owner_block(tmp_path, "module.billing.github_repository.default[0]")
+    assert is_module and block.text.startswith('module "billing"')
+    assert find_owner_block(tmp_path, "module.other.x.y") is None
