@@ -1,6 +1,6 @@
 # DriftPilot evaluation results
 
-Generated 2026-10-25 06:37 UTC by `python eval/run_eval.py` · LLM: `gemini-3.1-flash-lite`
+Generated 2026-10-25 06:39 UTC by `python eval/run_eval.py` · LLM: `gemini-3.1-flash-lite`
 
 ## Dataset
 
@@ -13,10 +13,10 @@ Generated 2026-10-25 06:37 UTC by `python eval/run_eval.py` · LLM: `gemini-3.1-
 | Setup | Noise filtered | Real drift found | Severity right | Critical caught | Action right | False alarms | LLM calls | ~Tokens | Time |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | raw terraform | 0% | 94% | 0% | 0% | 0% | 100% | 0 | 0 | 0.0s |
-| rules only | 98% | 100% | 19% | 45% | 19% | 2% | 0 | 0 | 0.3s |
+| rules only | 98% | 100% | 19% | 45% | 19% | 2% | 0 | 0 | 0.6s |
 | rules + local LLM | — | — | — | — | — | — | not run: skipped by choice: local model not installed (8 GB laptop); OllamaClient exists — set llm.provider: ollama to run it | | |
-| rules + cloud LLM | 98% | 100% | 89% | 90% | 92% | 2% | 52 | 43,107 | 357.7s |
-| cloud LLM without rules | 98% | 100% | 89% | 90% | 92% | 2% | 76 | 64,124 | 276.7s |
+| rules + cloud LLM | 98% | 100% | 89% | 90% | 92% | 2% | 52 | 43,107 | 0.6s |
+| cloud LLM without rules | 98% | 100% | 89% | 90% | 92% | 2% | 76 | 64,124 | 0.1s |
 
 How to read it:
 

@@ -7778,6 +7778,6 @@
     "cases": 12,
     "findings": 12,
     "identical_share": 1.0,
-    "llm_calls": 59
+    "llm_calls": 1
   }
 }

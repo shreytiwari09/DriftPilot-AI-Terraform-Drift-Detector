@@ -176,3 +176,41 @@ rules:
     )
     with pytest.raises(ValueError, match="unknown rule predicate"):
         load_rules(path)
+
+
+# ---- Repository rulesets (found on the second repo, Cloud Posse module) ----
+
+
+def test_live_ruleset_approvals_reduced_is_critical(load_fixture) -> None:
+    ids = rule_ids(load_fixture("github/platform_ruleset_approvals_reduced"))
+    assert ids["rules[0].pull_request[0].required_approving_review_count"] == (
+        "github-ruleset-approvals-reduced"
+    )
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "rule"),
+    [
+        ({"enforcement": "active"}, {"enforcement": "disabled"}, "github-ruleset-disabled"),
+        ({"enforcement": "active"}, {"enforcement": "evaluate"}, "github-ruleset-evaluate-only"),
+        (
+            {"rules": [{"deletion": True}]},
+            {"rules": [{"deletion": False}]},
+            "github-ruleset-deletion-allowed",
+        ),
+        (
+            {"rules": [{"non_fast_forward": True}]},
+            {"rules": [{"non_fast_forward": False}]},
+            "github-ruleset-force-push-allowed",
+        ),
+    ],
+)
+def test_ruleset_weakening_rules(before, after, rule) -> None:
+    address = 'module.billing.github_repository_ruleset.default["main"]'
+    plan = one_change("github_repository_ruleset", before, after, address=address)
+    assert list(rule_ids(plan).values()) == [rule]
+
+
+def test_ruleset_deleted() -> None:
+    plan = one_change("github_repository_ruleset", {"name": "x"}, None, actions=("delete",))
+    assert rule_ids(plan) == {None: "github-ruleset-deleted"}

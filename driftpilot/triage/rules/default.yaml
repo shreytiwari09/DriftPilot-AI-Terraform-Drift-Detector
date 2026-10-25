@@ -105,6 +105,85 @@ rules:
       confidence: 0.95
       reason: Required pull request approvals were lowered, so changes can merge with less review.
 
+  # Repository rulesets: GitHub's newer branch protection (used e.g. by the Cloud Posse module).
+  # Added after the second-repo test: the classic-protection rules above don't match them.
+  - id: github-ruleset-deleted
+    description: A repository ruleset removed outside Terraform.
+    match: { type: github_repository_ruleset, change_kind: deleted }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: A branch ruleset was deleted, so the protections it enforced no longer apply.
+
+  - id: github-ruleset-approvals-reduced
+    description: Fewer required pull request approvals in a ruleset.
+    match: { type: github_repository_ruleset, attribute: "*required_approving_review_count" }
+    when: decreased
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: The ruleset's required approvals were lowered, so changes can merge with less review.
+
+  - id: github-ruleset-deletion-allowed
+    description: Ruleset no longer blocks deleting the branch.
+    match: { type: github_repository_ruleset, attribute: "rules*.deletion" }
+    when: { changed_to: false }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: The ruleset no longer blocks deleting the protected branch.
+
+  - id: github-ruleset-force-push-allowed
+    description: Ruleset no longer blocks force pushes.
+    match: { type: github_repository_ruleset, attribute: "rules*.non_fast_forward" }
+    when: { changed_to: false }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: The ruleset no longer blocks force pushes, so history on the branch can be rewritten.
+
+  - id: github-ruleset-disabled
+    description: Ruleset switched off.
+    match: { type: github_repository_ruleset, attribute: enforcement }
+    when: { changed_to: disabled }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: The ruleset was disabled, so none of its protections are enforced.
+
+  - id: github-ruleset-evaluate-only
+    description: Ruleset switched to report-only.
+    match: { type: github_repository_ruleset, attribute: enforcement }
+    when: { changed_to: evaluate }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: The ruleset only reports now ("evaluate"), so nothing it checks is actually blocked.
+
   # SPEC §4.4 lists this under critical rules; the §7 scenario table (used as eval labels) says high.
   - id: github-team-permission-admin
     description: A team was given admin on a repository.
