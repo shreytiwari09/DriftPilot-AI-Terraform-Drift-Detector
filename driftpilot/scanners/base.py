@@ -35,6 +35,7 @@ def tf_name(name: str) -> str:
 
 class Scanner(Protocol):
     provider: str
+    include_names: list[str]
     ignore_names: list[str]
 
     def list_resources(self) -> list[ScannedResource]: ...
@@ -75,5 +76,6 @@ def find_unmanaged(
         )
         for r in scanner.list_resources()
         if r.resource_id not in managed
+        and any(fnmatch(r.name, pattern) for pattern in scanner.include_names)
         and not any(fnmatch(r.name, pattern) for pattern in scanner.ignore_names)
     ]

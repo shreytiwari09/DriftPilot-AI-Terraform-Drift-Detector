@@ -29,7 +29,12 @@ def build_scanners(config: Config) -> list[Scanner]:
         from driftpilot.scanners.docker import DockerScanner
 
         scanners.append(
-            DockerScanner(docker.from_env(), docker_cfg.managed_label, docker_cfg.ignore_names)
+            DockerScanner(
+                docker.from_env(),
+                docker_cfg.managed_label,
+                docker_cfg.ignore_names,
+                docker_cfg.include_names,
+            )
         )
     github_cfg = config.scanners.github
     if github_cfg and github_cfg.enabled:
@@ -41,6 +46,11 @@ def build_scanners(config: Config) -> list[Scanner]:
         if not token:
             raise RuntimeError("GitHub scanner needs GITHUB_TOKEN in the environment")
         scanners.append(
-            GitHubScanner(Github(auth=Auth.Token(token)), github_cfg.owner, github_cfg.ignore_names)
+            GitHubScanner(
+                Github(auth=Auth.Token(token)),
+                github_cfg.owner,
+                github_cfg.ignore_names,
+                github_cfg.include_names,
+            )
         )
     return scanners

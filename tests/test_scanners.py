@@ -68,3 +68,19 @@ def test_parse_timestamp() -> None:
     assert ts == datetime(2026, 10, 24, 17, 40, 12, 123456, tzinfo=UTC)
     assert parse_timestamp(None) is None
     assert parse_timestamp("garbage") is None
+
+
+def test_include_names_scopes_a_shared_org(load_fixture) -> None:
+    """Two Terraform setups in one org: each repo's scanner owns only its names."""
+    org = MagicMock()
+    org.get_repos.return_value = [
+        SimpleNamespace(id=1, name="demo-billing", created_at=NOW),
+        SimpleNamespace(id=2, name="demo-billing-tmp", created_at=NOW),
+        SimpleNamespace(id=3, name="demo-api", created_at=NOW),  # owned by the other setup
+    ]
+    org.get_teams.return_value = []
+    client = MagicMock()
+    client.get_organization.return_value = org
+    scanner = GitHubScanner(client, "driftpilot-demo", [], include_names=["demo-billing*"])
+    names = [u.name for u in find_unmanaged(scanner, {}, "r1", NOW)]
+    assert names == ["demo-billing", "demo-billing-tmp"]

@@ -22,10 +22,17 @@ def import_target(u: UnmanagedFinding) -> ImportTarget | None:
 class DockerScanner:
     provider = PROVIDER
 
-    def __init__(self, client: Any, managed_label: str, ignore_names: list[str]) -> None:
+    def __init__(
+        self,
+        client: Any,
+        managed_label: str,
+        ignore_names: list[str],
+        include_names: list[str] | None = None,
+    ) -> None:
         self.client = client  # docker.DockerClient; injected so tests can pass a mock
         self.label = managed_label
         self.ignore_names = ignore_names
+        self.include_names = include_names or ["*"]
 
     def list_resources(self) -> list[ScannedResource]:
         filters = {"label": self.label}

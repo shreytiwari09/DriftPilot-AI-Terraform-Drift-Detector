@@ -27,12 +27,15 @@ class LLMConfig(BaseModel):
 class DockerScannerConfig(BaseModel):
     enabled: bool = True
     managed_label: str = "managed-by=terraform"
+    include_names: list[str] = ["*"]  # which resources this repo's Terraform should own
     ignore_names: list[str] = []
 
 
 class GitHubScannerConfig(BaseModel):
     enabled: bool = True
     owner: str
+    # Org with several Terraform setups: scan only the names this repo should own.
+    include_names: list[str] = ["*"]
     ignore_names: list[str] = []
 
 

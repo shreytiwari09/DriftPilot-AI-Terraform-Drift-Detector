@@ -19,10 +19,17 @@ def import_target(u: UnmanagedFinding) -> ImportTarget | None:
 class GitHubScanner:
     provider = PROVIDER
 
-    def __init__(self, client: Any, owner: str, ignore_names: list[str]) -> None:
+    def __init__(
+        self,
+        client: Any,
+        owner: str,
+        ignore_names: list[str],
+        include_names: list[str] | None = None,
+    ) -> None:
         self.client = client  # github.Github; injected so tests can pass a mock
         self.owner = owner
         self.ignore_names = ignore_names
+        self.include_names = include_names or ["*"]
 
     def list_resources(self) -> list[ScannedResource]:
         org = self.client.get_organization(self.owner)
