@@ -33,9 +33,9 @@ shortcut, a mistake. Reality then **drifts** away from the code.
 
 ```mermaid
 flowchart LR
-  code["📄 Terraform code<br/>approvals = 2"] -- "terraform apply" --> real["☁️ Real infrastructure<br/>approvals = 2"]
-  person["🧑 Someone, by hand"] -. "changes it to 0" .-> real
-  real -. "drift: code says 2, reality is 0" .-> code
+  code["📄 Terraform code<br/>approvals = 2"] -->|"terraform apply"| real["☁️ Real infrastructure<br/>approvals = 0 ⚠️"]
+  person["🧑 Someone, by hand"] -.->|"changes 2 → 0"| real
+  real --- drift(["Drift: the code says 2, reality is 0"])
 ```
 
 Plain Terraform has four blind spots:
@@ -81,7 +81,7 @@ repository.
 ## How it works
 
 ```mermaid
-flowchart LR
+flowchart TB
   T["⏰ Triggers<br/>schedule · button · events"] --> P["terraform plan<br/>-refresh-only"]
   P --> C["Collector<br/>one finding per<br/>changed setting"]
   S["Scanners<br/>GitHub · Docker"] --> U["Unmanaged<br/>resources"]
