@@ -27,6 +27,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5"]
+demo = ["streamlit>=1.40"]  # local demo console (demo/console), not needed by the Action
 
 [project.scripts]
 driftpilot = "driftpilot.cli:app"
