@@ -85,7 +85,9 @@ def test_new_issue_with_labels_marker_and_revert_command() -> None:
     )
     assert kwargs["labels"] == ["driftpilot", "severity:critical"]
     assert marker("revert:github_branch_protection.api_main") in kwargs["body"]
+    assert "cd infra && terraform plan -target=github_branch_protection.api_main" in kwargs["body"]
     assert "cd infra && terraform apply -target=github_branch_protection.api_main" in kwargs["body"]
+    assert "depends on" in kwargs["body"]
     assert "https://run/1" in kwargs["body"]
     created = {c.args[0] for c in repo.create_label.call_args_list}
     assert "severity:critical" in created and "driftpilot" not in created

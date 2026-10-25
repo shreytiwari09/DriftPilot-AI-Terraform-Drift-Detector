@@ -79,11 +79,17 @@ def _changes_table(item: Item) -> str:
     return "\n".join(rows)
 
 
-def revert_command(item: Item, working_dir: str) -> str:
+def revert_command(item: Item, working_dir: str, verb: str = "apply") -> str:
     flag = "-replace" if any(needs_replace_to_revert(f) for f in item.findings) else "-target"
     cd = f"cd {shlex.quote(working_dir)} && " if working_dir not in ("", ".") else ""
     # Quoted: module addresses like module.x.y["main"] contain brackets and quotes.
-    return f"{cd}terraform apply {shlex.quote(f'{flag}={item.plan.address}')}"
+    return f"{cd}terraform {verb} {shlex.quote(f'{flag}={item.plan.address}')}"
+
+
+FIX_NOTE = (
+    "Run the plan first and read it: `-target` also includes what this resource depends on, so "
+    "other drifted settings (for example on the same repository) can be changed too."
+)
 
 
 def _patch_section(patch: Patch) -> str:
@@ -114,8 +120,11 @@ def issue_body(item: Item, patch: Patch | None, run_url: str | None) -> str:
             "",
             "### How to fix",
             "",
+            FIX_NOTE,
+            "",
             "```bash",
-            revert_command(item, item.working_dir),
+            revert_command(item, item.working_dir, "plan") + "   # preview",
+            revert_command(item, item.working_dir, "apply"),
             "```",
         ]
     if patch is not None:
