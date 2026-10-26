@@ -20,6 +20,7 @@
   <a href="#how-it-works">How it works</a> ·
   <a href="#results">Results</a> ·
   <a href="#use-it">Use it</a> ·
+  <a href="#live-demo-walkthrough">Live demo</a> ·
   <a href="https://driftpilot-demo.github.io/drift-dashboard/simulated/">Live dashboard</a>
 </p>
 
@@ -256,7 +257,78 @@ driftpilot report --history history/ --html site/   # analytics + dashboard
   `unverified`.
 - 🧑‍⚖️ **Critical drift goes to people.** Critical findings never get an automatic PR.
 
-## Demo and evaluation
+## Live demo walkthrough
+
+About 15 minutes: talk, four live stories, results. Each story shows one stage of the pipeline happening on real
+infrastructure (the `driftpilot-demo` org and two Docker containers), driven from the local demo console.
+
+### 0. Before you start
+
+1. Start Docker Desktop, then run the console:
+   ```bash
+   pip install -e ".[demo]"
+   streamlit run demo/console/app.py         # opens http://localhost:8501
+   ```
+2. Check the sidebar shows ✅ for the demo org token, the Gemini key, `gh` login and Docker.
+3. Open the **Reset** tab and click **Undo all changes**. Wait about 2 minutes for the runs to finish, so you start
+   from a clean state.
+
+### 1. The problem (talk, 1–2 min)
+
+Terraform code is the blueprint. People still change the real infrastructure by hand, for example during an outage.
+The two then disagree, which is called drift. Plain `terraform plan` only lists differences: no judgment, no
+noise filtering, no fix, and no view of resources created outside Terraform.
+
+### 2. The idea (talk, 1–2 min)
+
+Walk through the [pipeline](#how-it-works): **detect → judge (rules, then AI, then policy) → fix (issue, or a
+proven PR) → learn**. The key line: DriftPilot never changes infrastructure itself. It proposes, and a person decides.
+
+### 3. Story 1: a dangerous change (tab "1 · Dangerous change", ~3 min)
+
+| Click | What happens | What it shows |
+| --- | --- | --- |
+| **Set approvals 2 → 0** | Required reviews on `demo-api` drop to 0 on GitHub | The hand change |
+| *(wait ~15 s)* | The relay starts DriftPilot in `infra` | Event-driven detection |
+| *(wait 1–2 min)* | Report: **critical**, `2 → 0`, `revert`, decided by a **rule** | Rules handle known cases with no AI |
+| Issue card | Issue with the change table, reason, and preview/apply commands | Critical drift goes to people |
+| **Undo** | Next run: "No drift detected" | The loop closes |
+
+### 4. Story 2: a good change (tab "2 · Good change", ~3 min)
+
+| Click | What happens | What it shows |
+| --- | --- | --- |
+| **Add a required status check** | A stricter rule appears on GitHub, not in the code | Not all drift is bad |
+| *(wait 1–2 min)* | No rule matches, so Gemini judges it: likely a hotfix → `codify` | AI judgment in a strict format |
+| Pull request card | The diff adds the block to `main.tf`; the proof reads "No changes" | Fixes are proven by Terraform first |
+| **Undo** | Removes the check | Humans merge, DriftPilot never does |
+
+### 5. Story 3: the same engine on a laptop (tab "3 · On my laptop", ~1.5 min)
+
+**Change memory 256 → 512 MB**, then **Scan**: the table shows the change judged by the LLM. Then **Propose a fix**:
+a verified two-line diff. Then **Undo**. The CLI and the Action share one engine.
+
+### 6. Story 4: learning over time (tab "4 · History", ~1 min)
+
+On 90 days of simulated history with planted patterns, point out:
+- the spike day and its change-point
+- the recurring-drift table
+- the human overrule rate crossing its threshold, which makes the verdict monitor warn that DriftPilot's own
+  judgment may be drifting
+
+### 7. Results and limits (~2 min)
+
+Show the [Results](#results) table. Mention the second repository
+built on someone else's module, and the [limitations](#limitations).
+
+### 8. Afterwards
+
+Open the **Reset** tab and click **Undo all changes**, then press Ctrl+C to stop the console.
+
+**If something fails live:** Story 1 needs no AI. If GitHub is slow, open the Actions page from the sidebar. Without
+internet, run Story 3 alone.
+
+### Commands behind the demo
 
 | What | Command |
 | --- | --- |
@@ -286,6 +358,39 @@ scripts/                 drift injector, history simulator
 eval/                    cases, results, cached LLM answers
 tests/                   186 unit tests (no network) + recorded fixtures
 ```
+
+## Related work
+
+DriftPilot builds on these findings and methods:
+
+**The problem**
+- Rahman, Mahdavi-Hezaveh & Williams, [*A systematic mapping study of infrastructure as code research*](https://arxiv.org/abs/1807.04872),
+  Information and Software Technology 108 (2019). Defects and security flaws in IaC are under-studied.
+- Rahman, Parnin & Williams, [*The Seven Sins: Security Smells in Infrastructure as Code Scripts*](https://2019.icse-conferences.org/event/icse-2019-technical-papers-the-seven-sins-security-smells-in-infrastructure-as-code-scripts),
+  ICSE 2019. Security weaknesses in IaC are common, which is why DriftPilot redacts secrets and treats weakened
+  controls as critical.
+- HashiCorp, [HCP Terraform drift detection](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/health).
+  Drift detection is an established paid feature. DriftPilot adds judgment, verified fixes and learning.
+
+**Using an LLM safely**
+- Kon et al., [*IaC-Eval: A Code Generation Benchmark for Cloud Infrastructure-as-Code Programs*](https://proceedings.neurips.cc/paper_files/paper/2024/hash/f26b29298ae8acd94bd7e839688e329b-Abstract.html),
+  NeurIPS 2024. LLM-written Terraform is often wrong, which is why every generated fix must pass `terraform plan`.
+- Chen, Lin, Schärli & Zhou, [*Teaching Large Language Models to Self-Debug*](https://arxiv.org/abs/2304.05128),
+  ICLR 2024. Feeding execution feedback back to the model improves code. DriftPilot sends Terraform's errors back for
+  up to 3 attempts.
+- Zheng et al., [*Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena*](https://proceedings.neurips.cc/paper_files/paper/2023/hash/91f18a1287b398d378ef22505bf41832-Abstract.html),
+  NeurIPS 2023. LLMs can judge close to human agreement but have biases. Hence structured output, a confidence
+  threshold, and human approval.
+
+**Learning from history**
+- Killick, Fearnhead & Eckley, [*Optimal detection of changepoints with a linear computational cost*](https://arxiv.org/abs/1101.1438),
+  JASA 2012. PELT, used for change-points.
+- Liu, Ting & Zhou, *Isolation Forest*, IEEE ICDM 2008. Used for unusual runs.
+- Gama et al., [*A Survey on Concept Drift Adaptation*](https://doi.org/10.1145/2523813), ACM Computing Surveys 2014.
+  The verdict monitor watches DriftPilot's own judgment for concept drift.
+
+**Similar tools:** [driftctl](https://github.com/snyk/driftctl) (drift and unmanaged-resource detection) and
+[Atlantis](https://www.runatlantis.io/) (Terraform changes through pull requests).
 
 ## Limitations
 
