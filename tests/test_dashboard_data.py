@@ -29,7 +29,7 @@ def run(t="2026-10-10T06:00:00Z", managed=20, unmanaged=5, **kw) -> dict:
     base = {
         "t": t, "repo": "acme/infra", "environment": "prod", "driftType": "infrastructure",
         "dir": "infra", "managed": managed, "unmanaged": unmanaged, "managedByTeam": {},
-        "unmanagedByTeam": {}, "findings": 0, "critical": 0,
+        "unmanagedByTeam": {},
     }  # fmt: skip
     return base | kw
 
@@ -161,3 +161,24 @@ def test_csv_neutralises_formulas() -> None:
     lines = text.splitlines()
     assert lines[0].startswith("start,resolvedAt,address")
     assert "'=HYPERLINK(1)" in lines[1] and ",," in lines[1]
+
+
+def test_run_records_keep_the_last_run_of_each_day_per_stream() -> None:
+    from datetime import UTC, datetime
+
+    from driftpilot.models import RunRecord
+
+    def make(hour: int, managed: int, repo: str = "a") -> RunRecord:
+        return RunRecord(
+            run_id=f"{repo}{hour}", timestamp=datetime(2026, 10, 1, hour, tzinfo=UTC),
+            working_dir="/x/infra", finding_count=0, critical_count=0, distinct_resources=0,
+            unmanaged_count=1, noise_count=0, managed_resource_count=managed, repo=repo,
+        )  # fmt: skip
+
+    from driftpilot.report.dashboard.data import run_records
+
+    rows = run_records([make(6, 10), make(12, 11), make(18, 12), make(7, 5, "b")])
+    assert [(r["repo"], r["managed"], r["dir"]) for r in rows] == [
+        ("b", 5, "infra"),
+        ("a", 12, "infra"),
+    ]

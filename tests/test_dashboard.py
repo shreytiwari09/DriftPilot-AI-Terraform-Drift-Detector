@@ -71,7 +71,7 @@ def test_data_has_what_the_filters_need() -> None:
 
 def test_account_ids_and_arns_never_reach_the_files() -> None:
     files = files_for(EVENTS, RUNS)
-    text = re.sub(r'"id": "[0-9a-f]{12}"', "", files["index.html"] + files["data.json"])
+    text = re.sub(r'"id":\s*"[0-9a-f]{12}"', "", files["index.html"] + files["data.json"])
     assert re.search(r"(?<!\d)\d{12}(?!\d)", text) is None  # (finding ids are hashes)
     assert "************" in text  # the masked accounts
 

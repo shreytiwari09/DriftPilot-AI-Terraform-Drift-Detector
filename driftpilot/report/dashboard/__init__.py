@@ -39,4 +39,5 @@ def build_dashboard(
 ) -> dict[str, str]:
     """The files to publish: `{"index.html": ..., "data.json": ...}`."""
     data = build_data(report, monitor, episodes, runs, title, note, publish_addresses)
-    return {"index.html": render_page(data), "data.json": json.dumps(data, indent=1) + "\n"}
+    text = json.dumps(data, separators=(",", ":")) + "\n"
+    return {"index.html": render_page(data), "data.json": text}

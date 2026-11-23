@@ -14,7 +14,7 @@ from typing import Any
 
 import pandas as pd
 
-from driftpilot.history.analytics import AnalyticsReport
+from driftpilot.history.analytics import AnalyticsReport, stream_key
 from driftpilot.history.verdict_monitor import OVERRULE_ALERT, MonitorReport
 from driftpilot.models import RunRecord
 from driftpilot.ownership import mask_ids
@@ -83,7 +83,10 @@ def episode_records(episodes: pd.DataFrame, publish_addresses: bool = True) -> l
 
 
 def run_records(runs: list[RunRecord]) -> list[dict]:
-    """The numbers per run that coverage and drift rate need."""
+    """What coverage and drift rate need: the last run of each day in each stream."""
+    last: dict[tuple, RunRecord] = {}
+    for r in sorted(runs, key=lambda r: r.timestamp):
+        last[(*stream_key(r), r.timestamp.date())] = r
     return [
         {
             "t": iso(r.timestamp),
@@ -95,10 +98,8 @@ def run_records(runs: list[RunRecord]) -> list[dict]:
             "unmanaged": r.unmanaged_count,
             "managedByTeam": r.managed_by_team,
             "unmanagedByTeam": r.unmanaged_by_team,
-            "findings": r.finding_count,
-            "critical": r.critical_count,
         }
-        for r in sorted(runs, key=lambda r: r.timestamp)
+        for r in sorted(last.values(), key=lambda r: r.timestamp)
     ]
 
 
