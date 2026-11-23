@@ -70,55 +70,78 @@ class AnalyticsReport(BaseModel):
     health: Health
 
 
+EPISODE_COLUMNS = [
+    "finding_id", "address", "attribute", "resource_type", "start", "end", "resolved_at",
+    "runs_seen", "severity", "category", "action", "source", "outcome", "resolved",
+    "team", "repo", "environment", "account", "drift_type",
+]  # fmt: skip
+
+
+def stream_key(run: RunRecord) -> tuple[str, str, str, str]:
+    """Runs of one repo, environment, drift type and folder follow each other: one stream."""
+    return run.repo, run.environment, run.drift_type, run.working_dir
+
+
 def episodes_frame(events: list[HistoryEvent], runs: list[RunRecord]) -> pd.DataFrame:
-    """One row per episode: when it started/ended, what it was, and how it was judged."""
-    columns = [
-        "finding_id", "address", "attribute", "start", "end", "runs_seen",
-        "severity", "category", "action", "source", "outcome", "resolved",
-    ]  # fmt: skip
+    """One row per episode: when it started/ended, what it was, who owns it, how it was judged.
+
+    "Next run" means the next run of the same stream, so repos scanned on interleaved schedules
+    do not break each other's episodes.
+    """
     drift = [e for e in events if isinstance(e.finding, DriftFinding)]
     if not drift or not runs:
-        return pd.DataFrame(columns=columns)
-    order = {r.run_id: i for i, r in enumerate(sorted(runs, key=lambda r: r.timestamp))}
-    last_run = len(order) - 1
+        return pd.DataFrame(columns=EPISODE_COLUMNS)
+    streams: dict[tuple, list[RunRecord]] = {}
+    for r in sorted(runs, key=lambda r: r.timestamp):
+        streams.setdefault(stream_key(r), []).append(r)
+    where = {r.run_id: (key, i) for key, rs in streams.items() for i, r in enumerate(rs)}
     rows = []
-    by_finding: dict[str, list[HistoryEvent]] = {}
+    by_finding: dict[tuple, list[HistoryEvent]] = {}
     for e in drift:
-        if e.run_id in order:
-            by_finding.setdefault(e.finding.id, []).append(e)
-    for fid, group in by_finding.items():
-        group.sort(key=lambda e: order[e.run_id])
+        if e.run_id in where:
+            by_finding.setdefault((where[e.run_id][0], e.finding.id), []).append(e)
+    for (key, fid), group in by_finding.items():
+        group.sort(key=lambda e: where[e.run_id][1])
         current: list[HistoryEvent] = []
         for e in group:
             value = json.dumps(e.finding.after, sort_keys=True, default=str)
             if current:
                 prev = current[-1]
                 same_value = value == json.dumps(prev.finding.after, sort_keys=True, default=str)
-                if order[e.run_id] == order[prev.run_id] + 1 and same_value:
+                if where[e.run_id][1] == where[prev.run_id][1] + 1 and same_value:
                     current.append(e)
                     continue
-                rows.append(_episode_row(fid, current, order, last_run))
+                rows.append(_episode_row(fid, current, where, streams[key]))
             current = [e]
-        rows.append(_episode_row(fid, current, order, last_run))
-    return pd.DataFrame(rows, columns=columns).sort_values("start", ignore_index=True)
+        rows.append(_episode_row(fid, current, where, streams[key]))
+    return pd.DataFrame(rows, columns=EPISODE_COLUMNS).sort_values("start", ignore_index=True)
 
 
-def _episode_row(fid: str, group: list[HistoryEvent], order: dict, last_run: int) -> dict:
+def _episode_row(fid: str, group: list[HistoryEvent], where: dict, stream: list[RunRecord]) -> dict:
     first, last = group[0], group[-1]
     outcomes = {e.human_outcome for e in group} - {"pending"}
+    index = where[last.run_id][1]
+    resolved = index < len(stream) - 1
     return {
         "finding_id": fid,
         "address": first.finding.address,
         "attribute": first.finding.attribute_path,
+        "resource_type": first.finding.resource_type,
         "start": first.timestamp,
         "end": last.timestamp,
+        "resolved_at": stream[index + 1].timestamp if resolved else None,
         "runs_seen": len(group),
         "severity": first.verdict.severity,
         "category": first.verdict.category,
         "action": first.verdict.recommended_action,
         "source": first.verdict.source,
         "outcome": outcomes.pop() if len(outcomes) == 1 else "pending",
-        "resolved": order[last.run_id] < last_run,
+        "resolved": resolved,
+        "team": first.context.team,
+        "repo": first.context.repo,
+        "environment": first.context.environment,
+        "account": first.context.account,
+        "drift_type": first.context.drift_type,
     }
 
 

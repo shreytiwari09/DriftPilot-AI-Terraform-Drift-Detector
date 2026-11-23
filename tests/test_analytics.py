@@ -119,3 +119,45 @@ def test_health() -> None:
 def test_empty_history() -> None:
     assert episodes_frame([], []).empty
     assert health(episodes_frame([], []), []).runs == 0
+
+
+def test_episode_rows_carry_context_and_resolution_time() -> None:
+    from driftpilot.models import Context
+
+    runs = [run(i) for i in range(6)]
+    e1, e2 = event(1), event(2)
+    for e in (e1, e2):
+        e.context = Context(team="payments", repo="acme/infra", environment="prod")
+    eps = episodes_frame([e1, e2], runs)
+    row = eps.iloc[0]
+    assert (row["team"], row["repo"], row["environment"], row["drift_type"]) == (
+        "payments",
+        "acme/infra",
+        "prod",
+        "infrastructure",
+    )
+    assert row["resource_type"] == "t"
+    assert row["resolved_at"] == runs[3].timestamp  # first run that no longer saw it
+    assert pd.isna(episodes_frame([event(4)], runs[:5]).iloc[0]["resolved_at"])  # still open
+
+
+def test_each_stream_of_runs_is_ordered_on_its_own() -> None:
+    # Two repos scan on interleaved runs; the same finding in each stays one episode per repo.
+    def stream_run(i: int, repo: str) -> RunRecord:
+        r = run(i)
+        return r.model_copy(update={"run_id": f"{repo}-{i}", "repo": repo})
+
+    def stream_event(i: int, repo: str) -> HistoryEvent:
+        from driftpilot.models import Context
+
+        e = event(i)
+        return e.model_copy(
+            update={"run_id": f"{repo}-{i}", "context": Context(repo=repo, team=repo)}
+        )
+
+    runs = [stream_run(i, repo) for i in range(6) for repo in ("a", "b")]
+    events = [stream_event(i, repo) for i in (1, 2, 3) for repo in ("a", "b")]
+    eps = episodes_frame(events, runs)
+    assert sorted(eps["repo"]) == ["a", "b"]
+    assert eps["runs_seen"].tolist() == [3, 3]
+    assert eps["resolved"].tolist() == [True, True]
