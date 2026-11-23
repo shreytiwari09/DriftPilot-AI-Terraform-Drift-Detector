@@ -72,8 +72,10 @@ def monitor(episodes: pd.DataFrame, now: datetime, min_decided: int = 5) -> Moni
             f"Humans overruled {recent_rate:.0%} of DriftPilot's decided verdicts in the last "
             f"{RECENT_DAYS} days{was}; threshold {OVERRULE_ALERT:.0%}."
         )
+    # PSI over a handful of episodes is noise (live: 1 new episode gave PSI 4.6)
+    enough = len(recent) >= min_decided and len(baseline) >= min_decided
     for dim, value in verdict_psi.items():
-        if value > PSI_ALERT:
+        if enough and value > PSI_ALERT:
             alerts.append(
                 f"The mix of verdict {dim} values shifted (PSI {value:.2f} > {PSI_ALERT}) "
                 f"compared with the previous {BASELINE_DAYS} days."

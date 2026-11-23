@@ -18,3 +18,4 @@ __pycache__/
 *.tfstate.*
 *.plan
 drift.json
+.DS_Store

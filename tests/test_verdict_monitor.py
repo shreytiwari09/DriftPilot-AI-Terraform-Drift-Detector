@@ -52,5 +52,13 @@ def test_too_few_decisions_no_alert() -> None:
     assert not monitor(eps, NOW).breached
 
 
+def test_mix_shift_needs_enough_recent_episodes() -> None:
+    """Live false alarm: one new episode in two weeks made PSI 4.6 on a mix of one."""
+    eps = frame(steady(range(15, 70)) + [(3, "pending", "critical", "revert")])
+    report = monitor(eps, NOW)
+    assert report.verdict_psi["action"] > 0.25  # still reported on the dashboard
+    assert not report.breached  # but too few episodes to call it a shift
+
+
 def test_empty() -> None:
     assert not monitor(pd.DataFrame(), NOW).breached
