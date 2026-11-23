@@ -87,6 +87,11 @@ def sanitize_value(value: Any, max_len: int = 500, keep_layout: bool = False) ->
     return value
 
 
+def altered(value: Any, max_len: int = VALUE_LIMIT) -> bool:
+    """True if cleaning would remove or cut something (whitespace changes alone do not count)."""
+    return sanitize_value(value, max_len, keep_layout=True) != value
+
+
 def injection_signals(value: Any) -> list[str]:
     """Names of injection-looking patterns found in `value`. A hint for humans, never a gate.
 

@@ -170,3 +170,10 @@ def test_budget_exhaustion_falls_back_to_investigate() -> None:
     out = triage_resource(llm, [injected_finding()])
     assert out["f1"].recommended_action == "investigate"
     assert "budget exceeded" in out["f1"].reason
+
+
+def test_whitespace_only_cleaning_is_not_reported_as_sanitising() -> None:
+    f = injected_finding().model_copy(update={"after": "two   spaces\nand a newline"})
+    events: list[GuardrailEvent] = []
+    triage_resource(FakeLLM([answer(verdict("description"))]), [f], events=events)
+    assert events == []

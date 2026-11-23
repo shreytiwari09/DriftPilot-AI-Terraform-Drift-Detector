@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, ValidationError
 from driftpilot.guardrails import (
     CODE_LIMIT,
     VALUE_LIMIT,
+    altered,
     injection_signals,
     sanitize_text,
     sanitize_value,
@@ -105,15 +106,7 @@ def build_input(
             "after": clean(f.after, VALUE_LIMIT),
             "times_drifted_before": history_counts.get(f.id, 0),
         }
-        if (
-            guardrails
-            and events is not None
-            and (change["before"], change["after"])
-            != (
-                f.before,
-                f.after,
-            )
-        ):
+        if guardrails and events is not None and altered([f.before, f.after]):
             events.append(GuardrailEvent(kind="sanitized", finding_id=f.id, detail="values"))
         changes.append(change)
     return {
