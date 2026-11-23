@@ -108,10 +108,15 @@ def scan(
 def report(
     history: Annotated[Path, typer.Option(help="History folder (drift-events.jsonl, runs.jsonl).")],
     html: Annotated[
-        Path | None, typer.Option(help="Also write the dashboard to <folder>/index.html.")
+        Path | None,
+        typer.Option(help="Also write the dashboard (index.html and data.json) to this folder."),
+    ] = None,
+    csv_file: Annotated[
+        Path | None, typer.Option("--csv", help="Also write the drift episodes to a CSV file.")
     ] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Machine-readable output.")] = False,
     note: Annotated[str | None, typer.Option(help="Banner text on the dashboard.")] = None,
+    config: ConfigOption = None,
 ) -> None:
     """Analyze drift history: recurring drift, anomalies, shifts, health, verdict monitor."""
     from driftpilot.history.analytics import analyze, episodes_frame
@@ -119,6 +124,9 @@ def report(
     from driftpilot.history.verdict_monitor import monitor
     from driftpilot.report.console import print_history
     from driftpilot.report.dashboard import build_dashboard
+    from driftpilot.report.dashboard.data import episode_records, episodes_csv
+
+    publish_addresses = _load(Path("."), config).dashboard.publish_addresses
 
     store = LocalStore(history)
     events, runs = store.load_events(), store.load_runs()
@@ -137,8 +145,16 @@ def report(
         print_history(analytics, mon, console)
     if html is not None:
         html.mkdir(parents=True, exist_ok=True)
-        (html / "index.html").write_text(build_dashboard(analytics, mon, episodes, note=note))
-        console.print(f"[green]Dashboard written to {html / 'index.html'}[/]")
+        files = build_dashboard(
+            analytics, mon, episodes, runs, note=note, publish_addresses=publish_addresses
+        )
+        for name, text in files.items():
+            (html / name).write_text(text)
+        console.print(f"[green]Dashboard written to {html / 'index.html'} (and data.json)[/]")
+    if csv_file is not None:
+        csv_file.parent.mkdir(parents=True, exist_ok=True)
+        csv_file.write_text(episodes_csv(episode_records(episodes, publish_addresses)))
+        console.print(f"[green]Episodes written to {csv_file}[/]")
 
 
 @app.command()
@@ -184,9 +200,9 @@ def _github_output(repo_name: str, token: str):
     return GitHubOutput(repo, repo.default_branch, run_url)
 
 
-def _learn_and_publish(result: ScanResult, output, branch: str) -> str:
+def _learn_and_publish(result: ScanResult, output, branch: str, cfg: Config) -> str:
     """Record history, update outcomes, monitor, publish the dashboard; return summary markdown."""
-    from driftpilot.history.learn import dashboard_html, learn, publish_dashboard
+    from driftpilot.history.learn import dashboard_files, learn, publish_dashboard
     from driftpilot.history.store import GitHubBranchStore
 
     learned = learn(GitHubBranchStore(output.repo, branch), result, output.repo, output)
@@ -206,9 +222,11 @@ def _learn_and_publish(result: ScanResult, output, branch: str) -> str:
     dashboard_repo = os.environ.get("DRIFTPILOT_DASHBOARD_REPO")
     dashboard_token = os.environ.get("DRIFTPILOT_DASHBOARD_TOKEN")
     if dashboard_repo and dashboard_token:
-        page = dashboard_html(learned, f"DriftPilot — {output.repo.full_name}")
+        files = dashboard_files(
+            learned, f"DriftPilot — {output.repo.full_name}", None, cfg.dashboard.publish_addresses
+        )
         url = publish_dashboard(
-            page, dashboard_repo, dashboard_token, f"Update dashboard ({result.run_id})"
+            files, dashboard_repo, dashboard_token, f"Update dashboard ({result.run_id})"
         )
         lines.append(f"- Dashboard: {url}")
     return "\n".join(lines) + "\n"
@@ -249,7 +267,7 @@ def action(
     history_md = ""
     if output is not None and (branch := os.environ.get("DRIFTPILOT_HISTORY_BRANCH")):
         try:
-            history_md = _learn_and_publish(result, output, branch)
+            history_md = _learn_and_publish(result, output, branch, cfg)
         except Exception as e:  # learning must never hide this run's drift report
             result.errors.append(f"history: {e}")
 

@@ -6,18 +6,30 @@
   1. a drift-rate spike on SPIKE_DAY (many new drifts in one day),
   2. RECURRING (address, attribute) drifting again every 3 days in the last 14 days,
   3. human overrule rate rising from ~10 % to ~50 % in the last 14 days (plus more severe drift).
+Each episode also gets a team, repo, environment, account and drift type (infrastructure or
+database), so the dashboard filters have something to show. By default the runs are split into one
+stream per repo/environment, like real scans. `simulate(split=False)` keeps the single stream the
+Phase 3 gate test was written for; the planted patterns are identical in both.
 Seeded: the same seed gives the same history.
 """
 
 import argparse
 import random
+import zlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from driftpilot.collector import finding_id
 from driftpilot.history.store import LocalStore
-from driftpilot.models import DriftFinding, HistoryEvent, RemediationResult, RunRecord, Verdict
+from driftpilot.models import (
+    Context,
+    DriftFinding,
+    HistoryEvent,
+    RemediationResult,
+    RunRecord,
+    Verdict,
+)
 
 DAYS = 90
 RUNS_PER_DAY = 4
@@ -31,15 +43,25 @@ MANAGED_RESOURCES = 60
 REPO = "https://github.com/driftpilot-demo/infra"
 
 # (address, attribute, values to drift to, category)
+# The last items of some groups are database objects: same number of values and same category as
+# the items they stand in for, so the random draws (and the planted patterns) do not change.
+DESCRIPTIONS = ["edited by hand", "hotfix note"]
 CATALOG = [
-    *[(f"github_repository.svc{i}", "description", ["edited by hand", "hotfix note"], "cosmetic")
-      for i in range(6)],
+    *[(f"github_repository.svc{i}", "description", DESCRIPTIONS, "cosmetic") for i in range(4)],
+    ("postgres.public.users", "comment", DESCRIPTIONS, "cosmetic"),
+    ("postgres.public.orders", "comment", DESCRIPTIONS, "cosmetic"),
     *[(f"github_repository.svc{i}", "topics", [["demo", "hotfix"], ["demo", "tmp"]], "cosmetic")
-      for i in range(6)],
-    *[(f"github_repository.svc{i}", "has_issues", [False], "availability") for i in range(4)],
+      for i in range(4)],
+    ("postgres.public.users", "index:idx_users_created", ["renamed", "rebuilt"], "cosmetic"),
+    ("postgres.public.orders", "index:idx_orders_status", ["renamed", "rebuilt"], "cosmetic"),
+    *[(f"github_repository.svc{i}", "has_issues", [False], "availability") for i in range(2)],
+    ("postgres.public.users.email", "nullable", [True], "availability"),
+    ("postgres.public.invoices.total", "nullable", [True], "availability"),
     *[(f"github_branch_protection.svc{i}_main",
        "required_pull_request_reviews[0].required_approving_review_count", [0, 1], "security")
-      for i in range(4)],
+      for i in range(2)],
+    ("postgres.public.orders", "policy:tenant_isolation", ["dropped", "loosened"], "security"),
+    ("postgres.public.payments", "policy:tenant_isolation", ["dropped", "loosened"], "security"),
     *[(f"github_team_repository.team{i}", "permission", ["admin", "maintain"], "security")
       for i in range(3)],
     *[(f"docker_container.app{i}", "memory", [512, 768, 1024], "availability") for i in range(5)],
@@ -48,6 +70,68 @@ CATALOG = [
 ]  # fmt: skip
 SEVERITY = {"cosmetic": "low", "availability": "medium", "security": "high"}
 ACTION = {"cosmetic": "codify", "availability": "codify", "security": "revert"}
+
+
+@dataclass(frozen=True)
+class Stream:
+    """One place DriftPilot runs: a repo in one environment. Its runs follow each other."""
+
+    slug: str
+    repo: str
+    environment: str
+    account: str
+    drift_type: str
+    managed: dict[str, int]  # resources in state, per team
+    unmanaged: dict[str, int]
+
+
+ACCOUNTS = {"prod": "123456789012", "staging": "210987654321", "dev": "345678901234"}
+STREAMS = {
+    s.slug: s
+    for s in [
+        Stream("infra-prod", "driftpilot-demo/infra", "prod", ACCOUNTS["prod"], "infrastructure",
+               {"payments": 10, "platform": 7, "security": 5}, {"platform": 2}),
+        Stream("infra-staging", "driftpilot-demo/infra", "staging", ACCOUNTS["staging"],
+               "infrastructure", {"payments": 5, "platform": 4, "security": 3}, {"payments": 1}),
+        Stream("platform-prod", "driftpilot-demo/platform", "prod", ACCOUNTS["prod"],
+               "infrastructure", {"platform": 8, "growth": 4}, {"growth": 1}),
+        Stream("platform-dev", "driftpilot-demo/platform", "dev", ACCOUNTS["dev"],
+               "infrastructure", {"platform": 5, "growth": 3}, {}),
+        Stream("database-prod", "driftpilot-demo/database", "prod", ACCOUNTS["prod"], "database",
+               {"data": 6}, {}),
+    ]
+}  # fmt: skip
+assert sum(sum(s.managed.values()) for s in STREAMS.values()) == MANAGED_RESOURCES
+
+
+def team_for(address: str) -> str:
+    if address.startswith("postgres."):
+        return "data"
+    if address.startswith(("github_branch_protection", "github_team_repository")):
+        return "security"
+    if address.startswith("docker_container"):
+        return "platform" if int(address[-1]) < 3 else "growth"
+    return "payments" if int(address.split(".")[1].removeprefix("svc")) % 2 == 0 else "platform"
+
+
+def stream_for(address: str) -> Stream:
+    """Where this resource lives (decided by the address, so it never uses the random draws)."""
+    spread = zlib.crc32(address.encode()) % 3
+    if address.startswith("postgres."):
+        return STREAMS["database-prod"]
+    if address.startswith("docker_container"):
+        return STREAMS["platform-dev" if spread == 0 else "platform-prod"]
+    return STREAMS["infra-staging" if spread == 0 else "infra-prod"]
+
+
+def resource_type(address: str, attribute: str) -> str:
+    if not address.startswith("postgres."):
+        return address.split(".")[0]
+    if attribute.startswith("policy:"):
+        return "pg_policy"
+    if attribute.startswith("index:"):
+        return "pg_index"
+    return "pg_column" if address.count(".") == 3 else "pg_table"
 
 
 @dataclass
@@ -60,6 +144,7 @@ class Episode:
     length: int  # runs
     overruled: bool
     severity: str
+    stream: Stream
 
 
 def _verdict(fid: str, ep: Episode, rng: random.Random) -> Verdict:
@@ -79,7 +164,7 @@ def _verdict(fid: str, ep: Episode, rng: random.Random) -> Verdict:
     )
 
 
-def simulate(days: int = DAYS, seed: int = 7, end: datetime | None = None):
+def simulate(days: int = DAYS, seed: int = 7, end: datetime | None = None, split: bool = False):
     rng = random.Random(seed)
     end = end or datetime(2026, 10, 25, tzinfo=UTC)
     start = end - timedelta(days=days)
@@ -101,6 +186,7 @@ def simulate(days: int = DAYS, seed: int = 7, end: datetime | None = None):
             length=rng.randint(1, 8),
             overruled=rng.random() < (OVERRULE_RECENT if recent else OVERRULE_BEFORE),
             severity=severity,
+            stream=stream_for(address),
         )
 
     episodes: list[Episode] = []
@@ -116,59 +202,84 @@ def simulate(days: int = DAYS, seed: int = 7, end: datetime | None = None):
 
     events: list[HistoryEvent] = []
     runs: list[RunRecord] = []
+    everything = Stream(  # the single stream of the gate test: all places in one run
+        "all", "unknown", "unknown", "unknown", "infrastructure",
+        {t: sum(s.managed.get(t, 0) for s in STREAMS.values())
+         for s in STREAMS.values() for t in s.managed}, {},
+    )  # fmt: skip
     for run in range(n_runs):
         ts = start + timedelta(hours=6 * run, minutes=17 + rng.randrange(5))
-        run_id = f"sim-{run:04d}"
         active = [e for e in episodes if e.start_run <= run < e.start_run + e.length]
-        for ep in active:
-            fid = finding_id(ep.address, ep.attribute)
-            finding = DriftFinding(
-                id=fid,
-                run_id=run_id,
-                detected_at=ts,
-                provider="simulated",
-                resource_type=ep.address.split(".")[0],
-                address=ep.address,
-                change_kind="modified",
-                attribute_path=ep.attribute,
-                before="as in code",
-                after=ep.after,
-            )
-            kind = "pull" if ACTION[ep.category] == "codify" else "issues"
-            remediation = RemediationResult(
-                finding_id=fid,
-                action=ACTION[ep.category],
-                verified=kind == "pull",
-                attempts=1,
-                pr_url=f"{REPO}/pull/{ep.start_run}" if kind == "pull" else None,
-                issue_url=f"{REPO}/issues/{ep.start_run}" if kind == "issues" else None,
-                finding_ids=[fid],
-            )
-            outcome = "overruled" if ep.overruled else "accepted"
-            events.append(
-                HistoryEvent(
+        groups = (
+            [(s, [e for e in active if e.stream is s]) for s in STREAMS.values()]
+            if split
+            else [(everything, active)]
+        )
+        for stream, members in groups:
+            run_id = f"sim-{run:04d}-{stream.slug}" if split else f"sim-{run:04d}"
+            for ep in members:
+                events.append(_event(ep, run_id, ts, rng))
+            managed = sum(stream.managed.values())
+            runs.append(
+                RunRecord(
                     run_id=run_id,
                     timestamp=ts,
-                    finding=finding,
-                    verdict=_verdict(fid, ep, rng),
-                    remediation=remediation,
-                    human_outcome=outcome,
+                    working_dir="simulated",
+                    finding_count=len(members),
+                    critical_count=sum(e.severity == "critical" for e in members),
+                    distinct_resources=len({e.address for e in members}),
+                    unmanaged_count=sum(stream.unmanaged.values()),
+                    noise_count=rng.randrange(3),
+                    managed_resource_count=managed if split else MANAGED_RESOURCES,
+                    repo=stream.repo,
+                    environment=stream.environment,
+                    drift_type=stream.drift_type,
+                    managed_by_team=stream.managed,
+                    unmanaged_by_team=stream.unmanaged,
                 )
             )
-        runs.append(
-            RunRecord(
-                run_id=run_id,
-                timestamp=ts,
-                working_dir="simulated",
-                finding_count=len(active),
-                critical_count=sum(e.severity == "critical" for e in active),
-                distinct_resources=len({e.address for e in active}),
-                unmanaged_count=0,
-                noise_count=rng.randrange(3),
-                managed_resource_count=MANAGED_RESOURCES,
-            )
-        )
     return events, runs
+
+
+def _event(ep: Episode, run_id: str, ts: datetime, rng: random.Random) -> HistoryEvent:
+    fid = finding_id(ep.address, ep.attribute)
+    finding = DriftFinding(
+        id=fid,
+        run_id=run_id,
+        detected_at=ts,
+        provider="postgres" if ep.stream.drift_type == "database" else "simulated",
+        resource_type=resource_type(ep.address, ep.attribute),
+        address=ep.address,
+        change_kind="modified",
+        attribute_path=ep.attribute,
+        before="as in code",
+        after=ep.after,
+    )
+    kind = "pull" if ACTION[ep.category] == "codify" else "issues"
+    remediation = RemediationResult(
+        finding_id=fid,
+        action=ACTION[ep.category],
+        verified=kind == "pull",
+        attempts=1,
+        pr_url=f"{REPO}/pull/{ep.start_run}" if kind == "pull" else None,
+        issue_url=f"{REPO}/issues/{ep.start_run}" if kind == "issues" else None,
+        finding_ids=[fid],
+    )
+    return HistoryEvent(
+        run_id=run_id,
+        timestamp=ts,
+        finding=finding,
+        verdict=_verdict(fid, ep, rng),
+        remediation=remediation,
+        human_outcome="overruled" if ep.overruled else "accepted",
+        context=Context(
+            team=team_for(ep.address),
+            repo=ep.stream.repo,
+            environment=ep.stream.environment,
+            account=ep.stream.account,
+            drift_type=ep.stream.drift_type,
+        ),
+    )
 
 
 def _poisson(rng: random.Random, lam: float) -> int:
@@ -188,8 +299,11 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--out", type=Path, required=True, help="history folder to write")
     parser.add_argument("--days", type=int, default=DAYS)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument(
+        "--single-stream", action="store_true", help="one run stream, as the Phase 3 gate uses"
+    )
     args = parser.parse_args(argv)
-    events, runs = simulate(args.days, args.seed)
+    events, runs = simulate(args.days, args.seed, split=not args.single_stream)
     LocalStore(args.out).save(events, runs, "simulated")
     print(f"wrote {len(events)} events, {len(runs)} runs to {args.out}")
     print(

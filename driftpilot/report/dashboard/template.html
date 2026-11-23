@@ -3,135 +3,614 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>$title</title>
+<title>__TITLE__</title>
 <style>
 :root {
   --bg: #ffffff; --fg: #1f2328; --muted: #59636e; --card: #f6f8fa; --line: #d1d9e0;
   --c-critical: #cf222e; --c-high: #e16f24; --c-medium: #bf8700; --c-low: #1a7f37; --c-main: #0969da;
+  --p1: #0969da; --p2: #8250df; --p3: #1a7f37; --p4: #bf8700; --p5: #cf222e; --p6: #e16f24;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #0d1117; --fg: #e6edf3; --muted: #9198a1; --card: #151b23; --line: #3d444d;
-          --c-main: #4493f8; }
+          --c-main: #4493f8; --p1: #4493f8; --p2: #ab7df8; --p3: #3fb950; --p4: #d29922;
+          --p5: #f85149; --p6: #f0883e; }
 }
 * { box-sizing: border-box; }
 body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--fg);
        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-main { max-width: 1100px; margin: 0 auto; }
+main { max-width: 1200px; margin: 0 auto; }
 h1 { margin: 0 0 4px; font-size: 24px; }
 h2 { font-size: 17px; margin: 32px 0 8px; }
 .sub, .hint, .label { color: var(--muted); }
 .sub { margin: 0 0 16px; }
 .note { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;
+           background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.filters label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 2px; }
+.filters .wide { grid-column: span 2; }
+input, select, button { font: inherit; font-size: 14px; color: var(--fg); background: var(--bg);
+                        border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
+                        min-height: 34px; min-width: 0; }
+button { cursor: pointer; }
+button:hover { border-color: var(--c-main); }
+.actions { display: flex; align-items: flex-end; gap: 8px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
 .tile { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
-.value { font-size: 22px; font-weight: 600; }
+.value { font-size: 24px; font-weight: 600; }
 .label { font-size: 13px; }
 .hint { font-size: 12px; }
+.badge { display: inline-block; font-size: 11px; border: 1px solid var(--line); border-radius: 10px;
+         padding: 0 7px; margin-top: 4px; color: var(--muted); }
+.badge.aws { border-color: var(--c-main); color: var(--c-main); }
 .chart { position: relative; height: 280px; background: var(--card); border: 1px solid var(--line);
          border-radius: 8px; padding: 8px; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+.chart .nochart { color: var(--muted); padding: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
 .scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
-th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th button { border: 0; background: none; padding: 0; min-height: 0; font-weight: 600; }
+th button:hover { text-decoration: underline; }
 code { font-size: 13px; }
 ul { padding-left: 20px; }
+.sev::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%;
+               margin-right: 6px; background: var(--muted); }
+.sev-critical::before { background: var(--c-critical); } .sev-high::before { background: var(--c-high); }
+.sev-medium::before { background: var(--c-medium); } .sev-low::before { background: var(--c-low); }
+.bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
 </style>
 </head>
 <body>
 <main>
-<h1>$title</h1>
-<p class="sub">$period · generated $generated</p>
-$banner
-<div class="tiles">$tiles</div>
+<h1 id="title"></h1>
+<p class="sub" id="sub"></p>
+<p class="note" id="note" hidden></p>
+
+<form class="filters" id="filters" aria-label="Filters" onsubmit="return false">
+  <label>From <input type="date" id="f-from"></label>
+  <label>To <input type="date" id="f-to"></label>
+  <label>Team <select id="f-team"></select></label>
+  <label>Repo <select id="f-repo"></select></label>
+  <label>Environment <select id="f-environment"></select></label>
+  <label>Drift type <select id="f-driftType"></select></label>
+  <label>Severity <select id="f-severity"></select></label>
+  <label>Status <select id="f-status"></select></label>
+  <label>Decided by <select id="f-decidedBy"></select></label>
+  <label>Human outcome <select id="f-outcome"></select></label>
+  <label class="wide">Search <input type="search" id="f-search" placeholder="resource, setting, team, repo"></label>
+  <div class="actions"><button type="button" id="f-reset">Reset filters</button></div>
+</form>
+<p class="hint" id="filter-summary"></p>
+
+<div class="tiles" id="tiles"></div>
 
 <h2>New drift per day</h2>
-<p class="hint">Bars: new drift episodes. Red dots: unusual days (z-score &gt; 3).
-Dashed lines: change-points, where the level of drift shifted.</p>
-<div class="chart"><canvas id="daily"></canvas></div>
+<p class="hint">New drift episodes per day, by severity. An episode is one stretch of the same
+change being present; a change that is still there next run is the same episode.</p>
+<div class="chart"><canvas id="chart-daily"></canvas></div>
 
 <div class="grid2">
-  <div><h2>Severity mix per week</h2><div class="chart"><canvas id="severity"></canvas></div></div>
-  <div><h2>Human overrule rate per week</h2><div class="chart"><canvas id="overrule"></canvas></div></div>
+  <div><h2>Episodes by team</h2><div class="chart"><canvas id="chart-team"></canvas></div></div>
+  <div><h2>Infrastructure vs database</h2><div class="chart"><canvas id="chart-type"></canvas></div></div>
+  <div><h2>Human overrule rate per week</h2><div class="chart"><canvas id="chart-overrule"></canvas></div>
+    <p class="hint">Weeks with fewer than 3 decided episodes are left out.</p></div>
+  <div><h2>Recurring offenders</h2>
+    <div class="scroll"><table><thead><tr><th>Resource</th><th>Setting</th><th>Episodes</th></tr></thead>
+      <tbody id="recurring-body"></tbody></table></div>
+    <p class="hint">The same setting drifting 3 or more times in the filtered episodes.</p></div>
 </div>
 
+<div class="bar"><h2>Episodes</h2><button type="button" id="csv">Download CSV of these rows</button></div>
+<div class="scroll"><table>
+  <thead><tr id="episodes-head"></tr></thead><tbody id="episodes-body"></tbody>
+</table></div>
+<p class="hint" id="episodes-note"></p>
+
+<h2>Statistics over all history (not affected by the filters)</h2>
+<p class="hint">Bars: new drift episodes. Red dots: unusual days (z-score &gt; 3).
+Dashed lines: change-points, where the level of drift shifted.</p>
+<div class="chart"><canvas id="chart-stats"></canvas></div>
+
 <h2>Verdict monitor</h2>
-<ul>$alerts</ul>
+<p class="hint">Is DriftPilot's own judgment drifting?</p>
+<ul id="alerts"></ul>
 
 <div class="grid2">
   <div><h2>Recurring drift (3+ times in 14 days)</h2>
-    <div class="scroll"><table>
-      <tr><th>Resource</th><th>Setting</th><th>Episodes</th></tr>$recurring
-    </table></div></div>
+    <div class="scroll"><table><thead><tr><th>Resource</th><th>Setting</th><th>Episodes</th></tr></thead>
+      <tbody id="stat-recurring"></tbody></table></div></div>
   <div><h2>Unusual days</h2>
-    <div class="scroll"><table>
-      <tr><th>Day</th><th>New</th><th>Usual</th><th>z</th></tr>$anomalies
-    </table></div></div>
+    <div class="scroll"><table><thead><tr><th>Day</th><th>New</th><th>Usual</th><th>z</th></tr></thead>
+      <tbody id="stat-days"></tbody></table></div></div>
 </div>
 
 <h2>Is the kind of drift changing? (last 14 days vs previous 56)</h2>
-<div class="scroll"><table>
-  <tr><th>Dimension</th><th>PSI</th><th>χ² p-value</th><th>Shifted</th></tr>$shifts
-</table></div>
+<div class="scroll"><table><thead><tr><th>Dimension</th><th>PSI</th><th>&chi;&sup2; p-value</th><th>Shifted</th></tr></thead>
+  <tbody id="stat-shifts"></tbody></table></div>
+<p class="hint" id="source"></p>
 </main>
-<script src="$chart_js"></script>
-<script>
-const D = $data_json;
-const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-Chart.defaults.color = css("--muted");
-Chart.defaults.borderColor = css("--line");
-Chart.defaults.maintainAspectRatio = false;
 
-const changePointLines = {
-  id: "changePoints",
-  afterDatasetsDraw(chart) {
-    const x = chart.scales.x, y = chart.scales.y, ctx = chart.ctx;
-    ctx.save();
-    ctx.strokeStyle = css("--c-critical");
-    ctx.setLineDash([4, 4]);
-    for (const day of D.changePoints) {
-      const px = x.getPixelForValue(D.days.indexOf(day));
-      ctx.beginPath(); ctx.moveTo(px, y.top); ctx.lineTo(px, y.bottom); ctx.stroke();
+<script src="__CHART_JS__"></script>
+<script id="embedded-data" type="application/json">__DATA__</script>
+
+<script id="logic">
+// Plain functions, no page access: the same sums as driftpilot/report/dashboard/data.py.
+const SEVERITIES = ["critical", "high", "medium", "low"];
+const RECURRING_MIN = 3;
+
+function inRange(t, f) {
+  const day = t.slice(0, 10);
+  return (!f.from || day >= f.from) && (!f.to || day <= f.to);
+}
+
+function filterEpisodes(episodes, f) {
+  const needle = (f.search || "").trim().toLowerCase();
+  return episodes.filter((e) => {
+    if (!inRange(e.start, f)) return false;
+    for (const key of ["team", "repo", "environment", "driftType", "severity", "decidedBy", "outcome"]) {
+      if (f[key] && e[key] !== f[key]) return false;
     }
-    ctx.restore();
-  },
+    if (f.status === "open" && e.resolved) return false;
+    if (f.status === "resolved" && !e.resolved) return false;
+    if (needle) {
+      const hay = [e.address, e.attribute, e.resourceType, e.team, e.repo].map((v) => v || "").join(" ");
+      if (!hay.toLowerCase().includes(needle)) return false;
+    }
+    return true;
+  });
+}
+
+// The latest run of each stream (repo, environment, drift type, folder) inside the filters.
+function latestPerStream(runs, f) {
+  const latest = {};
+  for (const r of runs) {
+    if ((f.repo && r.repo !== f.repo) || (f.environment && r.environment !== f.environment)) continue;
+    if (f.driftType && r.driftType !== f.driftType) continue;
+    if (!inRange(r.t, f)) continue;
+    const key = [r.repo, r.environment, r.driftType, r.dir].join("|");
+    if (!(key in latest) || r.t >= latest[key].t) latest[key] = r;
+  }
+  return Object.values(latest);
+}
+
+// Managed and unmanaged resources, or nulls when unknown (never a made-up number).
+function managedAndUnmanaged(runs, f) {
+  const latest = latestPerStream(runs, f);
+  if (!latest.length) return { managed: null, unmanaged: null };
+  let managed = 0, unmanaged = 0;
+  for (const r of latest) {
+    if (r.managed === null) return { managed: null, unmanaged: null };
+    if (!f.team) {
+      managed += r.managed;
+      unmanaged += r.unmanaged;
+    } else if (Object.keys(r.managedByTeam).length) {
+      managed += r.managedByTeam[f.team] || 0;
+      unmanaged += r.unmanagedByTeam[f.team] || 0;
+    } else {
+      return { managed: null, unmanaged: null };  // counts per team were not recorded for this run
+    }
+  }
+  return { managed, unmanaged };
+}
+
+function pct(part, whole) {
+  return whole ? Math.round((1000 * part) / whole) / 10 : null;
+}
+
+function computeKpis(episodes, runs, f, asOf) {
+  const eps = filterEpisodes(episodes, f);
+  const { managed, unmanaged } = managedAndUnmanaged(runs, f);
+  const drifted = new Set(eps.map((e) => e.address)).size;
+
+  const open = eps.filter((e) => !e.resolved);
+  let oldest = null;
+  if (open.length && asOf) {
+    const first = open.map((e) => e.start).sort()[0];
+    oldest = Math.round((10 * (Date.parse(asOf) - Date.parse(first))) / 3600000) / 10;
+  }
+  const hours = eps
+    .filter((e) => e.resolved && e.resolvedAt)
+    .map((e) => (Date.parse(e.resolvedAt) - Date.parse(e.start)) / 3600000);
+  const accepted = eps.filter((e) => e.outcome === "accepted").length;
+  const overruled = eps.filter((e) => e.outcome === "overruled").length;
+  const decided = accepted + overruled;
+  const settings = {};
+  for (const e of eps) {
+    const key = e.address + "\u0000" + e.attribute;
+    settings[key] = (settings[key] || 0) + 1;
+  }
+  return {
+    episodes: eps.length,
+    managed, unmanaged,
+    driftedResources: drifted,
+    iacCoverage: managed === null ? null : pct(managed, managed + unmanaged),
+    driftRate: managed ? pct(drifted, managed) : null,
+    openCount: open.length,
+    oldestOpenHours: oldest,
+    mttrHours: hours.length ? Math.round((10 * hours.reduce((a, b) => a + b, 0)) / hours.length) / 10 : null,
+    decided,
+    overruleRate: pct(overruled, decided),
+    alertPrecision: pct(accepted, decided),
+    recurringOffenders: Object.values(settings).filter((n) => n >= RECURRING_MIN).length,
+  };
+}
+
+// Settings that drifted RECURRING_MIN or more times, most often first.
+function recurringOffenders(episodes) {
+  const groups = {};
+  for (const e of episodes) {
+    const key = e.address + "\u0000" + (e.attribute || "");
+    groups[key] = groups[key] || { address: e.address, attribute: e.attribute, episodes: 0 };
+    groups[key].episodes += 1;
+  }
+  return Object.values(groups).filter((g) => g.episodes >= RECURRING_MIN).sort((a, b) => b.episodes - a.episodes);
+}
+
+function dailyBySeverity(days, episodes, f) {
+  const shown = days.filter((d) => (!f.from || d >= f.from) && (!f.to || d <= f.to));
+  const series = {};
+  for (const s of SEVERITIES) series[s] = shown.map(() => 0);
+  const index = {};
+  shown.forEach((d, i) => (index[d] = i));
+  for (const e of episodes) {
+    const i = index[e.start.slice(0, 10)];
+    if (i !== undefined && series[e.severity]) series[e.severity][i] += 1;
+  }
+  return { days: shown, series };
+}
+
+function teamCounts(episodes) {
+  const teams = {};
+  for (const e of episodes) {
+    teams[e.team] = teams[e.team] || { critical: 0, high: 0, medium: 0, low: 0, total: 0 };
+    if (teams[e.team][e.severity] !== undefined) teams[e.team][e.severity] += 1;
+    teams[e.team].total += 1;
+  }
+  return Object.entries(teams).sort((a, b) => b[1].total - a[1].total);
+}
+
+function countBy(episodes, key) {
+  const counts = {};
+  for (const e of episodes) counts[e[key]] = (counts[e[key]] || 0) + 1;
+  return counts;
+}
+
+function weekStart(day) {  // Monday of the week containing `day` (YYYY-MM-DD)
+  const d = new Date(day + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
+function weeklyOverrule(episodes, minDecided) {
+  const weeks = {};
+  for (const e of episodes) {
+    if (e.outcome === "pending") continue;
+    const w = weekStart(e.start.slice(0, 10));
+    weeks[w] = weeks[w] || { decided: 0, overruled: 0 };
+    weeks[w].decided += 1;
+    if (e.outcome === "overruled") weeks[w].overruled += 1;
+  }
+  return Object.keys(weeks).sort().filter((w) => weeks[w].decided >= minDecided)
+    .map((w) => ({ week: w, rate: pct(weeks[w].overruled, weeks[w].decided) }));
+}
+
+function sortEpisodes(episodes, key, dir) {
+  const rank = (v) => (v === null || v === undefined ? "" : v);
+  return episodes.slice().sort((a, b) => {
+    const x = rank(a[key]), y = rank(b[key]);
+    return (x < y ? -1 : x > y ? 1 : 0) * dir;
+  });
+}
+
+function ageText(hours) {
+  if (hours === null || hours === undefined) return "—";
+  if (hours < 48) return hours + " h";
+  return Math.floor(hours / 24) + " d " + Math.round(hours % 24) + " h";
+}
+
+const CSV_COLUMNS = ["start", "resolvedAt", "address", "attribute", "resourceType", "team", "repo",
+  "environment", "account", "driftType", "severity", "category", "action", "decidedBy", "outcome",
+  "resolved", "runsSeen"];
+
+function episodesCsv(episodes) {
+  const cell = (v) => {
+    let text = v === null || v === undefined ? "" : String(v);
+    if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;  // keep spreadsheets from running it
+    return /[",\n]/.test(text) ? '"' + text.replace(/"/g, '""') + '"' : text;
+  };
+  return [CSV_COLUMNS.join(",")]
+    .concat(episodes.map((e) => CSV_COLUMNS.map((c) => cell(e[c])).join(",")))
+    .join("\n") + "\n";
+}
+</script>
+
+<script id="page">
+// The page: reads the data, draws the filters, tiles, charts and tables. Every piece of
+// text is set with textContent, never parsed as HTML, because team names and tags are text
+// other people can write.
+const FILTER_IDS = ["from", "to", "team", "repo", "environment", "driftType", "severity", "status",
+  "decidedBy", "outcome", "search"];
+const REFRESH_MS = 5 * 60 * 1000;
+const TABLE_LIMIT = 200;
+const COLUMNS = [
+  ["start", "Started", (e) => e.start.slice(0, 16).replace("T", " ")],
+  ["address", "Resource", (e) => e.address],
+  ["attribute", "Setting", (e) => e.attribute || "—"],
+  ["team", "Team", (e) => e.team],
+  ["repo", "Repo", (e) => e.repo],
+  ["environment", "Env", (e) => e.environment],
+  ["driftType", "Type", (e) => e.driftType],
+  ["severity", "Severity", (e) => e.severity],
+  ["action", "Action", (e) => e.action],
+  ["decidedBy", "Decided by", (e) => e.decidedBy],
+  ["outcome", "Outcome", (e) => e.outcome],
+  ["resolved", "Status", (e) => (e.resolved ? "resolved" : "open")],
+];
+
+let data = JSON.parse(document.getElementById("embedded-data").textContent);
+let source = "embedded copy";
+let sort = { key: "start", dir: -1 };
+let showAll = false;
+const charts = {};
+const byId = (id) => document.getElementById(id);
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function el(tag, text, className) {
+  const node = document.createElement(tag);
+  if (text !== undefined && text !== null) node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+
+function readFilters() {
+  const f = {};
+  for (const id of FILTER_IDS) f[id] = byId("f-" + id).value;
+  return f;
+}
+
+function setOptions(id, label, values, labels) {
+  const select = byId("f-" + id);
+  const keep = select.value;
+  select.replaceChildren(new Option(label, ""));
+  for (const v of values) select.add(new Option(labels ? labels[v] : v, v));
+  select.value = values.includes(keep) ? keep : "";
+}
+
+function distinct(key) {
+  return [...new Set(data.episodes.map((e) => e[key]))].sort();
+}
+
+function fillFilters() {
+  setOptions("team", "All teams", distinct("team"));
+  setOptions("repo", "All repos", distinct("repo"));
+  setOptions("environment", "All environments", distinct("environment"));
+  setOptions("driftType", "All types", distinct("driftType"));
+  setOptions("severity", "Any severity", SEVERITIES);
+  setOptions("status", "Open and resolved", ["open", "resolved"]);
+  setOptions("decidedBy", "Anyone", ["rule", "llm", "policy"],
+    { rule: "Rule", llm: "AI (LLM)", policy: "Policy" });
+  setOptions("outcome", "Any outcome", ["accepted", "overruled", "pending"]);
+  byId("f-from").min = byId("f-to").min = (data.periodStart || "").slice(0, 10);
+  byId("f-from").max = byId("f-to").max = (data.periodEnd || "").slice(0, 10);
+}
+
+function renderTiles(k, f) {
+  const num = (v, unit) => (v === null || v === undefined ? "—" : v + (unit || ""));
+  const teamNote = f.team && k.managed === null ? "not recorded per team for these runs" : "";
+  const tiles = [
+    ["IaC coverage", num(k.iacCoverage, "%"), "AWS Well-Architected metric",
+      k.managed === null ? teamNote || "no run in range" : k.managed + " managed of " + (k.managed + k.unmanaged) + " resources"],
+    ["Drift rate", num(k.driftRate, "%"), "AWS Well-Architected metric",
+      k.managed ? k.driftedResources + " drifted resource(s) of " + k.managed + " managed" : teamNote],
+    ["Open drift", String(k.openCount), "DriftPilot metric", "oldest open: " + ageText(k.oldestOpenHours)],
+    ["Mean time to resolve", k.mttrHours === null ? "—" : ageText(k.mttrHours), "DriftPilot metric",
+      "first seen until the first run without it"],
+    ["Overrule rate", num(k.overruleRate, "%"), "DriftPilot metric", "of " + k.decided + " decided by a human"],
+    ["Alert precision", num(k.alertPrecision, "%"), "DriftPilot metric", "accepted / (accepted + overruled)"],
+    ["Recurring offenders", String(k.recurringOffenders), "DriftPilot metric", "settings that drifted 3+ times"],
+  ];
+  byId("tiles").replaceChildren(...tiles.map(([label, value, badge, hint]) => {
+    const tile = el("div", null, "tile");
+    tile.append(el("div", value, "value"), el("div", label, "label"), el("div", hint, "hint"),
+      el("span", badge, badge.startsWith("AWS") ? "badge aws" : "badge"));
+    return tile;
+  }));
+}
+
+function drawChart(id, config) {
+  if (typeof Chart === "undefined") {
+    const box = byId(id).parentElement;
+    if (!box.querySelector(".nochart")) box.append(el("p", "Charts need Chart.js from cdnjs, which could not be loaded (offline?). The numbers and tables still work.", "nochart"));
+    return;
+  }
+  Chart.defaults.color = css("--muted");
+  Chart.defaults.borderColor = css("--line");
+  Chart.defaults.maintainAspectRatio = false;
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(byId(id), config);
+}
+
+function renderCharts(eps, f) {
+  const daily = dailyBySeverity(data.analytics.days, eps, f);
+  drawChart("chart-daily", {
+    type: "bar",
+    data: { labels: daily.days, datasets: SEVERITIES.map((s) => ({ label: s, data: daily.series[s], backgroundColor: css("--c-" + s) })) },
+    options: { scales: { x: { stacked: true, ticks: { maxTicksLimit: 12 } }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } } },
+  });
+  const teams = teamCounts(eps).slice(0, 12);
+  drawChart("chart-team", {
+    type: "bar",
+    data: { labels: teams.map((t) => t[0]), datasets: SEVERITIES.map((s) => ({ label: s, data: teams.map((t) => t[1][s]), backgroundColor: css("--c-" + s) })) },
+    options: { indexAxis: "y", scales: { x: { stacked: true, beginAtZero: true, ticks: { precision: 0 } }, y: { stacked: true } } },
+  });
+  const types = countBy(eps, "driftType");
+  drawChart("chart-type", {
+    type: "doughnut",
+    data: { labels: Object.keys(types), datasets: [{ data: Object.values(types), backgroundColor: [css("--p1"), css("--p2")], borderColor: css("--card") }] },
+  });
+  const weeks = weeklyOverrule(eps, 3);
+  drawChart("chart-overrule", {
+    type: "line",
+    data: {
+      labels: weeks.map((w) => w.week),
+      datasets: [
+        { label: "Overruled %", data: weeks.map((w) => w.rate), borderColor: css("--c-main"), tension: 0.2 },
+        { label: "Alert threshold", data: weeks.map(() => data.monitor.overruleThreshold), borderColor: css("--c-critical"), borderDash: [6, 4], pointRadius: 0 },
+      ],
+    },
+    options: { scales: { y: { beginAtZero: true, max: 100 } } },
+  });
+}
+
+function fillRows(tbodyId, rows) {
+  const body = byId(tbodyId);
+  body.replaceChildren(...(rows.length ? rows : [["None."]]).map((cells) => {
+    const tr = el("tr");
+    for (const c of cells) tr.append(el("td", c));
+    if (cells.length === 1) tr.firstChild.colSpan = 4;
+    return tr;
+  }));
+}
+
+function renderTable(eps) {
+  const head = byId("episodes-head");
+  head.replaceChildren(...COLUMNS.map(([key, label]) => {
+    const th = el("th");
+    const button = el("button", label + (sort.key === key ? (sort.dir > 0 ? " ▲" : " ▼") : ""));
+    button.type = "button";
+    button.onclick = () => {
+      sort = { key, dir: sort.key === key ? -sort.dir : 1 };
+      render();
+    };
+    th.setAttribute("aria-sort", sort.key === key ? (sort.dir > 0 ? "ascending" : "descending") : "none");
+    th.append(button);
+    return th;
+  }));
+  const sorted = sortEpisodes(eps, sort.key, sort.dir);
+  const shown = showAll ? sorted : sorted.slice(0, TABLE_LIMIT);
+  const empty = el("tr");
+  const emptyCell = el("td", "No episodes match these filters.");
+  emptyCell.colSpan = COLUMNS.length;
+  empty.append(emptyCell);
+  byId("episodes-body").replaceChildren(...(shown.length ? shown : [null]).map((e) => {
+    if (!e) return empty;
+    const tr = el("tr");
+    for (const [key, , get] of COLUMNS) {
+      const td = el("td", get(e));
+      if (key === "severity") td.className = "sev sev-" + e.severity;
+      if (key === "address" || key === "attribute") td.style.fontFamily = "ui-monospace, monospace";
+      tr.append(td);
+    }
+    return tr;
+  }));
+  const note = byId("episodes-note");
+  note.replaceChildren();
+  if (sorted.length > TABLE_LIMIT && !showAll) {
+    const more = el("button", "Show all " + sorted.length + " rows");
+    more.type = "button";
+    more.onclick = () => { showAll = true; render(); };
+    note.append("Showing the first " + TABLE_LIMIT + " of " + sorted.length + ". ", more);
+  }
+}
+
+function renderStats() {
+  const a = data.analytics;
+  byId("alerts").replaceChildren(...(data.monitor.alerts.length ? data.monitor.alerts : ["None."]).map((t) => el("li", t)));
+  fillRows("stat-recurring", a.recurring.map((r) => [r.address, r.attribute || "—", String(r.episodes)]));
+  fillRows("stat-days", a.dayAnomalies.map((d) => [d.day, String(d.newEpisodes), String(d.usual), String(d.z)]));
+  fillRows("stat-shifts", a.shifts.map((s) => [s.dimension, String(s.psi), s.chi2p === null ? "—" : String(s.chi2p), s.shifted ? "yes" : "no"]));
+  const changePointLines = {
+    id: "changePoints",
+    afterDatasetsDraw(chart) {
+      const x = chart.scales.x, y = chart.scales.y, ctx = chart.ctx;
+      ctx.save();
+      ctx.strokeStyle = css("--c-critical");
+      ctx.setLineDash([4, 4]);
+      for (const day of a.changePoints) {
+        const px = x.getPixelForValue(a.days.indexOf(day));
+        ctx.beginPath(); ctx.moveTo(px, y.top); ctx.lineTo(px, y.bottom); ctx.stroke();
+      }
+      ctx.restore();
+    },
+  };
+  drawChart("chart-stats", {
+    data: {
+      labels: a.days,
+      datasets: [
+        { type: "bar", label: "New episodes", data: a.daily, backgroundColor: css("--c-main") },
+        { type: "line", label: "Unusual day", data: a.anomalies, showLine: false, pointRadius: 6, pointBackgroundColor: css("--c-critical"), borderColor: css("--c-critical") },
+      ],
+    },
+    options: { scales: { x: { ticks: { maxTicksLimit: 12 } }, y: { beginAtZero: true, ticks: { precision: 0 } } } },
+    plugins: [changePointLines],
+  });
+}
+
+function render() {
+  const f = readFilters();
+  const eps = filterEpisodes(data.episodes, f);
+  const k = computeKpis(data.episodes, data.runs, f, data.asOf);
+  document.title = data.title;
+  byId("title").textContent = data.title;
+  const period = data.periodStart ? data.periodStart.slice(0, 10) + " → " + data.periodEnd.slice(0, 10) : "no runs yet";
+  byId("sub").textContent = period + " · generated " + data.generated.replace("T", " ").replace("Z", " UTC");
+  byId("note").hidden = !data.note;
+  byId("note").textContent = data.note || "";
+  byId("filter-summary").textContent = eps.length + " of " + data.episodes.length + " drift episodes match the filters.";
+  renderTiles(k, f);
+  renderCharts(eps, f);
+  renderTable(eps);
+  fillRows("recurring-body", recurringOffenders(eps).slice(0, 10).map((r) => [r.address, r.attribute || "—", String(r.episodes)]));
+  const aggregate = data.publishAddresses ? "" : " Resource addresses are hidden (dashboard.publish_addresses is false).";
+  byId("source").textContent = "Data source: " + source + "." + aggregate;
+}
+
+function renderAll() {
+  fillFilters();
+  renderStats();
+  render();
+}
+
+async function refresh() {
+  try {
+    const response = await fetch("data.json", { cache: "no-store" });
+    if (!response.ok) throw new Error(String(response.status));
+    const fresh = await response.json();
+    if (fresh.generated !== data.generated || source !== "data.json") {
+      data = fresh;
+      source = "data.json, fetched " + new Date().toLocaleTimeString();
+      renderAll();
+    }
+  } catch (err) {
+    // Opened from disk, or offline: keep the embedded copy.
+  }
+}
+
+let timer = null;
+for (const id of FILTER_IDS) {
+  byId("f-" + id).addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => { showAll = false; render(); }, id === "search" ? 200 : 0);
+  });
+}
+byId("f-reset").onclick = () => {
+  for (const id of FILTER_IDS) byId("f-" + id).value = "";
+  render();
 };
+byId("csv").onclick = () => {
+  const rows = sortEpisodes(filterEpisodes(data.episodes, readFilters()), sort.key, sort.dir);
+  const url = URL.createObjectURL(new Blob([episodesCsv(rows)], { type: "text/csv" }));
+  const link = el("a");
+  link.href = url;
+  link.download = "driftpilot-episodes.csv";
+  link.click();
+  URL.revokeObjectURL(url);
+};
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { renderStats(); render(); });
 
-new Chart(document.getElementById("daily"), {
-  data: {
-    labels: D.days,
-    datasets: [
-      { type: "bar", label: "New episodes", data: D.daily, backgroundColor: css("--c-main") },
-      { type: "line", label: "Unusual day", data: D.anomalies, showLine: false, pointRadius: 6,
-        pointBackgroundColor: css("--c-critical"), borderColor: css("--c-critical") },
-    ],
-  },
-  options: { scales: { x: { ticks: { maxTicksLimit: 12 } }, y: { beginAtZero: true } } },
-  plugins: [changePointLines],
-});
-
-new Chart(document.getElementById("severity"), {
-  type: "bar",
-  data: {
-    labels: D.severity.weeks,
-    datasets: ["critical", "high", "medium", "low"].map((s) => ({
-      label: s, data: D.severity.series[s], backgroundColor: css("--c-" + s),
-    })),
-  },
-  options: { scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } },
-});
-
-new Chart(document.getElementById("overrule"), {
-  type: "line",
-  data: {
-    labels: D.overrule.weeks,
-    datasets: [
-      { label: "Overruled %", data: D.overrule.rates, borderColor: css("--c-main"), tension: 0.2 },
-      { label: "Alert threshold", data: D.overrule.weeks.map(() => D.overrule.threshold),
-        borderColor: css("--c-critical"), borderDash: [6, 4], pointRadius: 0 },
-    ],
-  },
-  options: { scales: { y: { beginAtZero: true, max: 100 } } },
-});
+renderAll();
+refresh();
+setInterval(refresh, REFRESH_MS);
 </script>
 </body>
 </html>

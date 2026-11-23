@@ -277,11 +277,10 @@ def build_data(
     }
 
 
-def _csv_safe(value: Any) -> Any:
-    """Stop spreadsheets running a cell as a formula (`=`, `+`, `-`, `@` at the start)."""
-    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
-        return "'" + value
-    return value
+def _csv_cell(value: Any) -> str:
+    """Cell text; a leading `=`, `+`, `-` or `@` gets a quote so spreadsheets don't run it."""
+    text = "" if value is None else str(value).lower() if isinstance(value, bool) else str(value)
+    return "'" + text if text[:1] in ("=", "+", "-", "@", "\t", "\r") else text
 
 
 def episodes_csv(episodes: list[dict]) -> str:
@@ -290,5 +289,5 @@ def episodes_csv(episodes: list[dict]) -> str:
     writer = csv.writer(out, lineterminator="\n")
     writer.writerow(CSV_COLUMNS)
     for e in episodes:
-        writer.writerow([_csv_safe("" if e[c] is None else e[c]) for c in CSV_COLUMNS])
+        writer.writerow([_csv_cell(e[c]) for c in CSV_COLUMNS])
     return out.getvalue()

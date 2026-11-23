@@ -198,3 +198,46 @@ def test_console_survives_markup_like_text_in_values() -> None:
     console = Console(record=True, width=120)
     print_result(result, console)
     assert "[/oops]" in console.export_text()
+
+
+def simulated_history(folder: Path) -> None:
+    import importlib.util
+
+    from driftpilot.history.store import LocalStore
+
+    spec = importlib.util.spec_from_file_location(
+        "simulate_history", Path(__file__).parents[1] / "scripts" / "simulate_history.py"
+    )
+    sim = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sim)
+    events, runs = sim.simulate(seed=7, split=True)
+    LocalStore(folder).save(events, runs, "sim")
+
+
+def test_report_writes_page_data_and_csv(tmp_path: Path) -> None:
+    import csv
+
+    simulated_history(tmp_path / "h")
+    out, csv_file = tmp_path / "site", tmp_path / "out" / "episodes.csv"
+    result = runner.invoke(
+        app,
+        ["report", "--history", str(tmp_path / "h"), "--html", str(out), "--csv", str(csv_file)],
+    )
+    assert result.exit_code == 0, result.output
+    assert (out / "index.html").exists()
+    data = json.loads((out / "data.json").read_text())
+    assert data["episodes"] and data["publishAddresses"] is True
+    rows = list(csv.DictReader(csv_file.open()))
+    assert len(rows) == len(data["episodes"]) and {"team", "repo", "driftType"} <= rows[0].keys()
+    assert any(r["address"] == "docker_container.app3" for r in rows)
+
+
+def test_report_hides_addresses_when_configured(tmp_path: Path) -> None:
+    simulated_history(tmp_path / "h")
+    config = tmp_path / "c.yml"
+    config.write_text("dashboard:\n  publish_addresses: false\n")
+    out = tmp_path / "site"
+    args = ["report", "--history", str(tmp_path / "h"), "--html", str(out), "--config", str(config)]
+    assert runner.invoke(app, args).exit_code == 0
+    for name in ("index.html", "data.json"):
+        assert "app3" not in (out / name).read_text()
