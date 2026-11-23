@@ -147,3 +147,54 @@ def test_action_opens_issue_for_critical(tmp_path: Path, monkeypatch) -> None:
     item = output.issue.call_args.args[0]
     assert (item.plan.action, item.plan.severity) == ("revert", "critical")
     assert "issues/7" in summary.read_text() and "### Fixes" in summary.read_text()
+
+
+def test_scan_history_gets_an_audit_line_per_llm_call(tmp_path: Path) -> None:
+    from driftpilot.history.store import LocalStore
+    from driftpilot.triage.llm import FakeLLM
+
+    fake = FakeLLM([LLM_ANSWER])
+    plan = FIXTURES / "docker/s11_memory_changed.json"
+    with patch("driftpilot.cli.build_llm", return_value=fake):
+        result = runner.invoke(app, ["scan", "--plan-json", str(plan), "--history", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+    [record] = LocalStore(tmp_path).load_audit()
+    assert record.purpose == "triage" and record.prompt_version == "triage-v3" and record.valid
+    assert "memory" not in record.model_dump_json()  # hashes only, never the prompt text
+
+
+def test_action_summary_has_a_guardrails_section(tmp_path: Path, monkeypatch) -> None:
+    from driftpilot.triage.llm import FakeLLM
+
+    summary = tmp_path / "summary.md"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    monkeypatch.setenv("DRIFTPILOT_WORKING_DIRECTORY", str(tmp_path))
+    plan = json.loads((FIXTURES / "docker/s11_memory_changed.json").read_text())
+    with (
+        patch("driftpilot.scan.terraform_init"),
+        patch("driftpilot.scan.refresh_only_plan", return_value=plan),
+        patch("driftpilot.cli.build_llm", return_value=FakeLLM([LLM_ANSWER])),
+    ):
+        result = runner.invoke(app, ["action"])
+    assert result.exit_code == 0, result.output
+    assert "### Guardrails" in summary.read_text()
+    assert "LLM calls: 1 of 60" in summary.read_text()
+
+
+def test_console_survives_markup_like_text_in_values() -> None:
+    from datetime import UTC, datetime
+
+    from rich.console import Console
+
+    from driftpilot.models import DriftFinding, ScanResult
+    from driftpilot.report.console import print_result
+
+    f = DriftFinding(
+        id="f", run_id="r", detected_at=datetime(2026, 10, 25, tzinfo=UTC), provider="p",
+        resource_type="t", address="t.x[/boom]", change_kind="modified",
+        attribute_path="description", before="a", after="[/oops] [red]x[/red]",
+    )  # fmt: skip
+    result = ScanResult(run_id="r", started_at=f.detected_at, working_dir=".", findings=[f])
+    console = Console(record=True, width=120)
+    print_result(result, console)
+    assert "[/oops]" in console.export_text()

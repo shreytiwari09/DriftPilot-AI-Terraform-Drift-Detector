@@ -35,9 +35,9 @@ def learn(
     updated = update_outcomes(events, repo) if repo is not None else 0
     new_events, run = records_from_scan(result)
     events, runs = [*events, *new_events], [*runs, run]
-    store.save(
-        events, runs, f"DriftPilot history: run {result.run_id} ({len(new_events)} event(s))"
-    )
+    message = f"DriftPilot history: run {result.run_id} ({len(new_events)} event(s))"
+    store.save(events, runs, message)
+    store.append_audit(result.audit, message)
 
     report = analyze(events, runs)
     episodes = episodes_frame(events, runs)

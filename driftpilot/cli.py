@@ -17,8 +17,8 @@ from driftpilot.remediate.runner import ConsoleOutput, run_remediations
 from driftpilot.report import counts
 from driftpilot.report.console import print_result
 from driftpilot.report.summary import build_summary
-from driftpilot.scan import run_scan
-from driftpilot.triage.llm import build_llm
+from driftpilot.scan import attach_audit, run_scan
+from driftpilot.triage.llm import AuditingLLM, build_llm, guarded
 
 app = typer.Typer(help="Detect, triage and fix Terraform drift.", no_args_is_help=True)
 console = Console()
@@ -45,16 +45,21 @@ def _load(working_dir: Path, config_path: Path | None) -> Config:
         raise typer.Exit(1) from e
 
 
+def _make_llm(config: Config, use_llm: bool) -> AuditingLLM | None:
+    """The configured LLM with the run's budget and audit trail, shared by scan and fixes."""
+    llm = guarded(build_llm(config.llm), config.limits) if use_llm else None
+    if use_llm and llm is None and config.llm.enabled:
+        err_console.print("[dim]No LLM API key found: undecided findings stay 'needs triage'.[/]")
+    return llm
+
+
 def _scan_or_exit(
     working_dir: Path,
     config: Config,
-    use_llm: bool,
+    llm: AuditingLLM | None,
     plan_json: Path | None = None,
     state_json: Path | None = None,
 ) -> ScanResult:
-    llm = build_llm(config.llm) if use_llm else None
-    if use_llm and llm is None and config.llm.enabled:
-        err_console.print("[dim]No LLM API key found: undecided findings stay 'needs triage'.[/]")
     try:
         return run_scan(working_dir, config, plan_json=plan_json, state_json=state_json, llm=llm)
     except (TerraformError, OSError, ValueError) as e:
@@ -86,7 +91,7 @@ def scan(
 ) -> None:
     """Check a Terraform directory for drift and unmanaged resources."""
     cfg = _load(directory, config)
-    result = _scan_or_exit(directory, cfg, use_llm, plan_json, state_json)
+    result = _scan_or_exit(directory, cfg, _make_llm(cfg, use_llm), plan_json, state_json)
     if history is not None:
         from driftpilot.history.store import LocalStore, append_scan
 
@@ -149,7 +154,8 @@ def fix(
 ) -> None:
     """Show the issues/PRs DriftPilot would open, with verified patches; never calls GitHub."""
     cfg = _load(directory, config).model_copy(update={"mode": "open-prs"})
-    result = _scan_or_exit(directory, cfg, use_llm=True)
+    llm = _make_llm(cfg, True)
+    result = _scan_or_exit(directory, cfg, llm)
     if finding:
         keep = {finding}
         result.findings = [f for f in result.findings if f.id in keep]
@@ -158,7 +164,8 @@ def fix(
             err_console.print(f"[red]error:[/] no real drift with finding ID {finding}")
             raise typer.Exit(1)
     output = ConsoleOutput(console, write_to=directory if write else None)
-    outcomes = run_remediations(result, cfg, build_llm(cfg.llm), directory, output)
+    outcomes = run_remediations(result, cfg, llm, directory, output)
+    attach_audit(result, llm)
     if not outcomes:
         console.print("[green]Nothing to fix.[/]")
     for error in result.errors:
@@ -223,7 +230,8 @@ def action(
     cfg = _load(working_directory, config_path if config_path.exists() else None)
     if mode:
         cfg = cfg.model_copy(update={"mode": mode})
-    result = _scan_or_exit(working_directory, cfg, use_llm=True)
+    llm = _make_llm(cfg, True)
+    result = _scan_or_exit(working_directory, cfg, llm)
 
     token = os.environ.get("DRIFTPILOT_GITHUB_TOKEN")
     repo_name = os.environ.get("GITHUB_REPOSITORY")
@@ -232,10 +240,11 @@ def action(
         try:
             output = _github_output(repo_name, token)
             result.remediations = run_remediations(
-                result, cfg, build_llm(cfg.llm), working_directory, output, str(working_directory)
+                result, cfg, llm, working_directory, output, str(working_directory)
             )
         except Exception as e:
             result.errors.append(f"remediation: {e}")
+    attach_audit(result, llm)  # now includes the calls fixes made
 
     history_md = ""
     if output is not None and (branch := os.environ.get("DRIFTPILOT_HISTORY_BRANCH")):

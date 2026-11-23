@@ -3,6 +3,7 @@
 from typing import TYPE_CHECKING
 
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from driftpilot.models import ScanResult
@@ -35,11 +36,13 @@ def print_result(result: ScanResult, console: Console, show_noise: bool = False)
             label = "needs triage" if sev == "triage" else sev
             table.add_row(
                 f"[{_STYLE[sev]}]{label}[/]",
-                f.address,
-                f.attribute_path or "—",
-                change_text(f),
+                escape(f.address),
+                escape(f.attribute_path or "—"),
+                escape(change_text(f)),
                 v.recommended_action if v else "—",
-                f"{v.reason} [dim]({decided_by(v)})[/]" if v else f"[dim]{decided_by(v)}[/]",
+                f"{escape(v.reason)} [dim]({decided_by(v)})[/]"
+                if v
+                else f"[dim]{decided_by(v)}[/]",
             )
         console.print(table)
 
@@ -49,15 +52,21 @@ def print_result(result: ScanResult, console: Console, show_noise: bool = False)
             table.add_column(column)
         for u in result.unmanaged:
             created = f"{u.created_at:%Y-%m-%d %H:%M}" if u.created_at else "—"
-            table.add_row(u.resource_kind, u.name, u.resource_id[:12], created)
+            table.add_row(escape(u.resource_kind), escape(u.name), u.resource_id[:12], created)
         console.print(table)
 
     if not findings and not result.unmanaged:
         console.print("[green]No drift detected.[/]")
     if c["noise"] and not show_noise:
         console.print(f"[dim]{c['noise']} noise finding(s) hidden (use --show-noise).[/]")
+    kinds = [e.kind for e in result.guardrail_events]
+    if "never-soften" in kinds or "suspicious-input" in kinds:
+        console.print(
+            f"[yellow]Guardrails:[/] {kinds.count('never-soften')} never-soften override(s), "
+            f"{kinds.count('suspicious-input')} suspicious input(s)."
+        )
     for error in result.errors:
-        console.print(f"[red]error:[/] {error}")
+        console.print(f"[red]error:[/] {escape(error)}")
 
 
 def print_history(report: "AnalyticsReport", monitor: "MonitorReport", console: Console) -> None:

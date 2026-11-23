@@ -7,7 +7,13 @@ import pytest
 from driftpilot.config import Config
 from driftpilot.models import DriftFinding, ScanResult, Verdict
 from driftpilot.remediate.codify import Patch
-from driftpilot.remediate.github_out import GitHubOutput, Item, marker, revert_command
+from driftpilot.remediate.github_out import (
+    GitHubOutput,
+    Item,
+    issue_body,
+    marker,
+    revert_command,
+)
 from driftpilot.remediate.runner import run_remediations
 from driftpilot.triage.policy import RemediationPlan
 
@@ -208,3 +214,106 @@ def test_revert_command_is_shell_safe_for_module_addresses() -> None:
     assert (
         shlex.split(cmd)[-1] == '-target=module.billing.github_repository_ruleset.default["main"]'
     )
+
+
+# ---- guardrails ----
+
+
+def many_findings(n: int, action="codify") -> ScanResult:
+    fs = [finding(f"f{i}", f"github_branch_protection.api_{i}") for i in range(n)]
+    return ScanResult(
+        run_id="r",
+        started_at=NOW,
+        working_dir="infra",
+        findings=fs,
+        verdicts={f.id: verdict(f.id, action) for f in fs},
+    )
+
+
+def test_runner_turns_plans_beyond_max_prs_into_issues(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("driftpilot.remediate.runner.codify", lambda *a: PATCH)
+    result = many_findings(4)
+    out = RecordingOutput()
+    config = Config.model_validate({"mode": "open-prs", "limits": {"max_prs": 2}})
+    results = run_remediations(result, config, object(), tmp_path, out, "infra")
+    assert [c[0] for c in out.calls] == ["pr", "pr", "issue", "issue"]
+    assert [r.pr_url for r in results] == ["pr-url", "pr-url", None, None]
+    assert [e.kind for e in result.guardrail_events] == ["pr-limit", "pr-limit"]
+    assert out.calls[2][2] is None  # no patch was even attempted for the extra plans
+
+
+def test_runner_makes_oversized_patches_unverified(monkeypatch, tmp_path) -> None:
+    big = Patch(True, {"main.tf": "\n".join(f"line {i}" for i in range(50))}, "No changes.", 1, "c")
+    monkeypatch.setattr("driftpilot.remediate.runner.codify", lambda *a: big)
+    result = many_findings(1)
+    out = RecordingOutput()
+    config = Config.model_validate({"mode": "open-prs", "limits": {"max_patch_lines": 10}})
+    results = run_remediations(result, config, object(), tmp_path, out, "infra")
+    assert out.calls[0][0] == "issue"
+    patch = out.calls[0][2]
+    assert not patch.verified and "too large" in patch.note and patch.files == {}
+    assert not results[0].verified
+    assert [e.kind for e in result.guardrail_events] == ["patch-too-large"]
+
+
+def test_runner_makes_patches_with_too_many_files_unverified(monkeypatch, tmp_path) -> None:
+    files = {f"f{i}.tf": "x" for i in range(4)}
+    monkeypatch.setattr(
+        "driftpilot.remediate.runner.codify", lambda *a: Patch(True, files, "ok", 1, "c")
+    )
+    out = RecordingOutput()
+    run_remediations(many_findings(1), Config(mode="open-prs"), object(), tmp_path, out)
+    assert out.calls[0][0] == "issue" and "4 files" in out.calls[0][2].note
+
+
+def test_patch_size_counts_only_changed_lines(monkeypatch, tmp_path) -> None:
+    (tmp_path / "main.tf").write_text("\n".join(f"line {i}" for i in range(500)) + "\n")
+    new = "\n".join(f"line {i}" if i != 7 else "changed" for i in range(500)) + "\n"
+    monkeypatch.setattr(
+        "driftpilot.remediate.runner.codify", lambda *a: Patch(True, {"main.tf": new}, "ok", 1, "c")
+    )
+    out = RecordingOutput()
+    run_remediations(many_findings(1), Config(mode="open-prs"), object(), tmp_path, out)
+    assert out.calls[0][0] == "pr"  # 2 changed lines, not 500
+
+
+def suspicious_item() -> Item:
+    i = item("investigate", "high")
+    f = i.findings[0]
+    i.verdicts[f.id] = verdict(f.id, "investigate", "high").model_copy(
+        update={"guardrails": ["suspicious-input"], "reason": "r (guardrail: suspicious input)"}
+    )
+    return i
+
+
+def test_suspicious_input_gets_a_label_and_a_warning() -> None:
+    repo = fake_repo()
+    GitHubOutput(repo, "main").issue(suspicious_item())
+    kwargs = repo.create_issue.call_args.kwargs
+    assert "suspicious-input" in kwargs["labels"]
+    assert "Guardrails" in kwargs["body"] and "untrusted" in kwargs["body"]
+    assert "suspicious-input" in [c.args[0] for c in repo.create_label.call_args_list]
+
+
+def test_ordinary_issue_has_no_guardrail_label_or_section() -> None:
+    repo = fake_repo()
+    GitHubOutput(repo, "main").issue(item("revert", "critical"))
+    kwargs = repo.create_issue.call_args.kwargs
+    assert "suspicious-input" not in kwargs["labels"] and "Guardrails" not in kwargs["body"]
+
+
+def test_never_soften_is_explained_in_the_issue() -> None:
+    i = item("revert", "critical")
+    f = i.findings[0]
+    i.verdicts[f.id] = verdict(f.id, "revert", "critical").model_copy(
+        update={"guardrails": ["never-soften"]}
+    )
+    body = GitHubOutput(fake_repo(), "main").issue(i) and issue_body(i, None, None)
+    assert "never-soften" in body and "Guardrails" in body
+
+
+def test_table_cells_drop_hidden_text() -> None:
+    f = finding()
+    f.after = "visible<!-- hidden --> `x`​"
+    body = issue_body(item("revert", "critical", [f]), None, None)
+    assert "hidden" not in body and "​" not in body

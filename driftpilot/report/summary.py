@@ -17,6 +17,37 @@ def _cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
 
+def _guardrails_section(result: ScanResult) -> list[str]:
+    """What the guardrails did this run; empty when the LLM was not used and nothing fired."""
+    if not (result.audit or result.guardrail_events):
+        return []
+    by_kind: dict[str, list] = {}
+    for e in result.guardrail_events:
+        by_kind.setdefault(e.kind, []).append(e)
+    budget = f" of {result.llm_call_limit}" if result.llm_call_limit is not None else ""
+    overrides = by_kind.get("never-soften", [])
+    suspicious = by_kind.get("suspicious-input", [])
+    lines = [
+        "",
+        "### Guardrails",
+        "",
+        f"- LLM calls: {len(result.audit)}{budget}",
+        f"- Never-soften overrides: {len(overrides)}"
+        + "".join(f"\n  - {_cell(e.detail)}" for e in overrides),
+        f"- Suspicious inputs: {len(suspicious)}"
+        + "".join(f"\n  - {_cell(e.detail)}" for e in suspicious),
+    ]
+    if sanitized := by_kind.get("sanitized"):
+        lines.append(f"- Inputs cleaned before the AI saw them: {len(sanitized)}")
+    for kind, text in (
+        ("budget-exceeded", "LLM budget exceeded"),
+        ("pr-limit", "PR limit reached, opened as an issue instead"),
+        ("patch-too-large", "Patch too large, sent as an unverified issue"),
+    ):
+        lines += [f"- ⚠️ {text}: {_cell(e.detail)}" for e in by_kind.get(kind, [])]
+    return lines
+
+
 def build_summary(result: ScanResult) -> str:
     c = counts(result)
     lines = [
@@ -79,6 +110,8 @@ def build_summary(result: ScanResult) -> str:
             kind = "pull request" if r.pr_url else "issue"
             verified = "✅ zero-change plan" if r.verified else "—"
             lines.append(f"| `{r.action}` | [{kind}]({link}) | {verified} |")
+
+    lines += _guardrails_section(result)
 
     if result.errors:
         lines += ["", "### Errors", ""] + [f"- {_cell(e)}" for e in result.errors]

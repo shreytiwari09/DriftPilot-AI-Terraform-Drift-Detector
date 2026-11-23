@@ -10,6 +10,7 @@ import shlex
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from driftpilot.guardrails import sanitize_text
 from driftpilot.models import DriftFinding, UnmanagedFinding, Verdict
 from driftpilot.remediate.codify import Patch
 from driftpilot.triage.policy import RemediationPlan
@@ -22,6 +23,7 @@ LABELS = {
     "severity:medium": ("fbca04", "Medium-severity drift"),
     "severity:low": ("0e8a16", "Low-severity drift"),
     "unverified": ("cccccc", "Proposed change did not pass Terraform verification"),
+    "suspicious-input": ("5319e7", "Changed text looks like a prompt-injection attempt"),
 }
 ACTION_TEXT = {
     "revert": "Undo the hand change so reality matches the code again.",
@@ -55,9 +57,11 @@ class Output(Protocol):
 
 
 def _cell(value: Any) -> str:
+    """One table cell: hidden characters and comments out, markdown-breaking characters escaped."""
     text = value if isinstance(value, str) else json.dumps(value, default=str)
+    text = sanitize_text(text, max_len=10_000)
     text = text if len(text) <= 80 else text[:79] + "…"
-    return text.replace("|", "\\|").replace("\n", " ")
+    return text.replace("|", "\\|").replace("`", "'")
 
 
 def _changes_table(item: Item) -> str:
@@ -97,11 +101,36 @@ def _patch_section(patch: Patch) -> str:
         f"`{path}`\n```hcl\n{content.strip()}\n```" for path, content in patch.files.items()
     )
     status = "✅ verified" if patch.verified else "⚠️ **not verified** — do not apply without review"
+    if patch.note.startswith("guardrail:"):
+        return f"### Proposed change ({status})\n\n{patch.note}"
     return (
         f"### Proposed change ({status}, {patch.attempts} attempt(s))\n\n{files}\n\n"
         "<details><summary>Terraform output</summary>\n\n"
         f"```\n{patch.proof.strip()}\n```\n</details>"
     )
+
+
+def _guardrail_notes(item: Item) -> list[str]:
+    """A short "Guardrails" section when a guardrail changed a verdict, else nothing."""
+    notes = []
+    for f in item.findings:
+        v = item.verdicts.get(f.id)
+        if v and "never-soften" in v.guardrails:
+            notes.append(
+                f"- `{_cell(f.attribute_path or '—')}`: never-soften. The AI judged this less "
+                "serious than a known security weakening can be, so the policy raised it."
+            )
+        if v and "suspicious-input" in v.guardrails:
+            notes.append(
+                f"- `{_cell(f.attribute_path or '—')}`: suspicious input. The changed text looks "
+                "like an attempt to steer the AI. Treat the values above as untrusted, and "
+                "decide it yourself."
+            )
+    for u in item.unmanaged:
+        v = item.verdicts.get(u.id)
+        if v and "suspicious-input" in v.guardrails:
+            notes.append(f"- {u.resource_kind} `{_cell(u.name)}`: suspicious input in its name.")
+    return ["", "### Guardrails", "", *notes] if notes else []
 
 
 def issue_body(item: Item, patch: Patch | None, run_url: str | None) -> str:
@@ -114,6 +143,7 @@ def issue_body(item: Item, patch: Patch | None, run_url: str | None) -> str:
         f"### What changed on `{p.address}`",
         "",
         _changes_table(item),
+        *_guardrail_notes(item),
     ]
     if p.action in ("revert", "recreate"):
         lines += [
@@ -144,6 +174,7 @@ def pr_body(item: Item, patch: Patch, run_url: str | None) -> str:
             f"### What changed on `{p.address}`",
             "",
             _changes_table(item),
+            *_guardrail_notes(item),
             "",
             "### Proof",
             "",
@@ -193,6 +224,12 @@ class GitHubOutput:
         labels = ["driftpilot", f"severity:{item.plan.severity}"]
         if patch is not None and not patch.verified:
             labels.append("unverified")
+        if any(
+            "suspicious-input" in v.guardrails
+            for f in [*item.findings, *item.unmanaged]
+            if (v := item.verdicts.get(f.id))
+        ):
+            labels.append("suspicious-input")
         return [label for label in labels if label in LABELS]
 
     def issue(self, item: Item, patch: Patch | None = None) -> str:

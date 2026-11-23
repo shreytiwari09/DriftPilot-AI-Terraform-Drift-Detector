@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -80,3 +81,64 @@ def test_github_store_reads_existing() -> None:
     )
     repo.get_contents.return_value = SimpleNamespace(decoded_content=line.encode(), sha="x")
     assert GitHubBranchStore(repo, "d").load_runs()[0].run_id == "r"
+
+
+def audit_record(run_id="r1", purpose="triage"):
+    from driftpilot.models import AuditRecord
+
+    return AuditRecord(
+        run_id=run_id, timestamp=NOW, purpose=purpose, model="m", prompt_sha256="a" * 64, valid=True
+    )
+
+
+def test_local_store_appends_audit_lines(tmp_path: Path) -> None:
+    store = LocalStore(tmp_path / "history")
+    store.append_audit([audit_record("r1")], "m")
+    store.append_audit([audit_record("r2", "codify"), audit_record("r2", "import")], "m")
+    store.append_audit([], "m")  # nothing to write
+    lines = (tmp_path / "history" / "audit.jsonl").read_text().splitlines()
+    assert len(lines) == 3
+    assert [r.run_id for r in store.load_audit()] == ["r1", "r2", "r2"]
+
+
+def test_old_stores_without_audit_load_empty(tmp_path: Path) -> None:
+    assert LocalStore(tmp_path).load_audit() == []
+
+
+def test_append_scan_writes_audit_next_to_events(tmp_path: Path, load_fixture) -> None:
+    result = scan(load_fixture("github/s2_required_approvals_reduced"))
+    result.audit = [audit_record()]
+    store = LocalStore(tmp_path)
+    append_scan(store, result)
+    assert len(store.load_audit()) == 1 and len(store.load_runs()) == 1
+
+
+def test_github_store_appends_audit_to_the_data_branch() -> None:
+    repo = MagicMock(default_branch="main")
+    not_found = type("NotFound", (Exception,), {"status": 404})
+    repo.get_branch.return_value = SimpleNamespace()
+    repo.get_contents.side_effect = not_found()
+    store = GitHubBranchStore(repo, "driftpilot-data")
+    store.append_audit([audit_record()], "msg")
+    path, message, text = repo.create_file.call_args.args[:3]
+    assert path == "history/audit.jsonl" and message == "msg" and text.count("\n") == 1
+
+    existing = SimpleNamespace(decoded_content=(text).encode(), sha="s1")
+    repo.get_contents.side_effect = None
+    repo.get_contents.return_value = existing
+    store.append_audit([audit_record("r2")], "msg2")
+    args = repo.update_file.call_args.args
+    assert args[0] == "history/audit.jsonl" and args[2].count("\n") == 2 and args[3] == "s1"
+
+
+def test_verdict_guardrails_round_trip_and_default(load_fixture) -> None:
+    from driftpilot.models import HistoryEvent
+
+    [event, *_] = records_from_scan(scan(load_fixture("github/s2_required_approvals_reduced")))[0]
+    assert event.verdict.guardrails == []
+    event.verdict.guardrails = ["never-soften"]
+    again = HistoryEvent.model_validate_json(event.model_dump_json())
+    assert again.verdict.guardrails == ["never-soften"]
+    old = json.loads(event.model_dump_json())
+    del old["verdict"]["guardrails"]  # a line written before the field existed
+    assert HistoryEvent.model_validate_json(json.dumps(old)).verdict.guardrails == []

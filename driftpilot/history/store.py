@@ -5,11 +5,12 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel
 
-from driftpilot.models import HistoryEvent, RunRecord, ScanResult, Verdict
+from driftpilot.models import AuditRecord, HistoryEvent, RunRecord, ScanResult, Verdict
 from driftpilot.report import counts
 
 EVENTS_FILE = "drift-events.jsonl"
 RUNS_FILE = "runs.jsonl"
+AUDIT_FILE = "audit.jsonl"  # one line per LLM call: hashes and guardrail events, never text
 
 
 def _parse(text: str, model: type[BaseModel]) -> list:
@@ -26,6 +27,10 @@ class HistoryStore(Protocol):
     def load_runs(self) -> list[RunRecord]: ...
 
     def save(self, events: list[HistoryEvent], runs: list[RunRecord], message: str) -> None: ...
+
+    def load_audit(self) -> list[AuditRecord]: ...
+
+    def append_audit(self, records: list[AuditRecord], message: str) -> None: ...
 
 
 class LocalStore:
@@ -48,6 +53,16 @@ class LocalStore:
         self.dir.mkdir(parents=True, exist_ok=True)
         (self.dir / EVENTS_FILE).write_text(_dump(events))
         (self.dir / RUNS_FILE).write_text(_dump(runs))
+
+    def load_audit(self) -> list[AuditRecord]:
+        return _parse(self._read(AUDIT_FILE), AuditRecord)
+
+    def append_audit(self, records: list[AuditRecord], message: str = "") -> None:
+        if not records:
+            return
+        self.dir.mkdir(parents=True, exist_ok=True)
+        with open(self.dir / AUDIT_FILE, "a") as f:
+            f.write(_dump(records))
 
 
 class GitHubBranchStore:
@@ -102,6 +117,24 @@ class GitHubBranchStore:
                     self._path(name), message, text, existing.sha, branch=self.branch
                 )
 
+    def load_audit(self) -> list[AuditRecord]:
+        return _parse(self._read(AUDIT_FILE), AuditRecord)
+
+    def append_audit(self, records: list[AuditRecord], message: str) -> None:
+        if not records:
+            return
+        self._ensure_branch()
+        existing = self._get(AUDIT_FILE)
+        if existing is None:
+            self.repo.create_file(
+                self._path(AUDIT_FILE), message, _dump(records), branch=self.branch
+            )
+        else:
+            text = existing.decoded_content.decode() + _dump(records)
+            self.repo.update_file(
+                self._path(AUDIT_FILE), message, text, existing.sha, branch=self.branch
+            )
+
 
 def _untriaged(finding_id: str) -> Verdict:
     return Verdict(
@@ -147,8 +180,6 @@ def records_from_scan(result: ScanResult) -> tuple[list[HistoryEvent], RunRecord
 
 def append_scan(store: HistoryStore, result: ScanResult) -> None:
     events, run = records_from_scan(result)
-    store.save(
-        [*store.load_events(), *events],
-        [*store.load_runs(), run],
-        f"DriftPilot history: run {result.run_id} ({len(events)} event(s))",
-    )
+    message = f"DriftPilot history: run {result.run_id} ({len(events)} event(s))"
+    store.save([*store.load_events(), *events], [*store.load_runs(), run], message)
+    store.append_audit(result.audit, message)

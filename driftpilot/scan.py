@@ -14,10 +14,10 @@ from driftpilot.collector import (
     terraform_init,
 )
 from driftpilot.config import Config
-from driftpilot.models import ScanResult, UnmanagedFinding
+from driftpilot.models import GuardrailEvent, ScanResult, UnmanagedFinding
 from driftpilot.scanners import build_scanners
 from driftpilot.scanners.base import find_unmanaged
-from driftpilot.triage.llm import LLMClient
+from driftpilot.triage.llm import AuditingLLM, LLMClient
 from driftpilot.triage.llm_triage import triage_findings
 from driftpilot.triage.policy import apply_policy
 from driftpilot.triage.rules import apply_rules, load_rules
@@ -50,6 +50,19 @@ def _scan_unmanaged(
     return unmanaged
 
 
+def attach_audit(result: ScanResult, llm: LLMClient | None) -> None:
+    """Copy the LLM audit trail and budget state onto the result (safe to call again later)."""
+    if not isinstance(llm, AuditingLLM):
+        return
+    result.audit = llm.collect(result.run_id)
+    result.llm_call_limit = llm.call_limit
+    result.guardrail_events = [e for e in result.guardrail_events if e.kind != "budget-exceeded"]
+    if llm.budget_exceeded:
+        result.guardrail_events.append(
+            GuardrailEvent(kind="budget-exceeded", detail=llm.budget_exceeded)
+        )
+
+
 def run_scan(
     working_dir: Path,
     config: Config,
@@ -75,12 +88,28 @@ def run_scan(
         plan = json.loads(plan_json.read_text())
     result.findings = parse_plan(plan, result.run_id, now)
     result.managed_resource_count = managed_resource_count(plan)
-    result.verdicts = apply_rules(result.findings, load_rules(), resource_values(plan))
+    resources = resource_values(plan)
+    result.verdicts = apply_rules(result.findings, load_rules(), resources)
     result.unmanaged = _scan_unmanaged(
         result, config, working_dir, plan_json is not None, state_json
     )
 
     if llm is not None:
-        result.verdicts |= triage_findings(llm, result.findings, result.verdicts, working_dir)
-    result.verdicts = apply_policy(result.findings, result.unmanaged, result.verdicts, config)
+        result.verdicts |= triage_findings(
+            llm,
+            result.findings,
+            result.verdicts,
+            working_dir,
+            guardrails=config.guardrails.enabled,
+            events=result.guardrail_events,
+        )
+    result.verdicts = apply_policy(
+        result.findings,
+        result.unmanaged,
+        result.verdicts,
+        config,
+        resources,
+        result.guardrail_events,
+    )
+    attach_audit(result, llm)
     return result
