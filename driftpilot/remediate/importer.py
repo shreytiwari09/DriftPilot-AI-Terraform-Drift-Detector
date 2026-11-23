@@ -3,16 +3,18 @@
 import json
 import re
 import tempfile
+from collections.abc import Sequence
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from driftpilot.collector import DEFAULT_TIMEOUT, run_terraform
+from driftpilot.guardrails import CODE_LIMIT, sanitize_value
 from driftpilot.hcl import find_block
 from driftpilot.remediate.codify import CodifyAnswer, Patch
 from driftpilot.remediate.verify import copy_workdir, verify_patch
 from driftpilot.scanners.base import ImportTarget
-from driftpilot.triage.llm import LLMClient, LLMError, ask
+from driftpilot.triage.llm import LLMClient, LLMError, ask, mark_valid
 from driftpilot.triage.llm_triage import load_prompt
 
 
@@ -57,7 +59,12 @@ def _style_example(working_dir: Path, target: ImportTarget) -> str | None:
 
 
 def import_resource(
-    llm: LLMClient | None, working_dir: Path, target: ImportTarget, max_retries: int = 3
+    llm: LLMClient | None,
+    working_dir: Path,
+    target: ImportTarget,
+    max_retries: int = 3,
+    guardrails: bool = True,
+    finding_ids: Sequence[str] = (),
 ) -> Patch:
     """A verified patch file `imported_<name>.tf` holding the import block and resource code."""
     generated, log = generate_config(working_dir, target)
@@ -72,17 +79,24 @@ def import_resource(
 
     if llm is not None:
         version, system = load_prompt("import")
+        example = _style_example(working_dir, target)
+        clean = (lambda v: sanitize_value(v, CODE_LIMIT, keep_layout=True)) if guardrails else str
         request = {
-            "generated_block": generated,
-            "style_example": _style_example(working_dir, target),
+            "generated_block": clean(generated),
+            "style_example": clean(example) if example else None,
         }
         prompt = "Tidy this block:\n" + json.dumps(request, indent=2)
         for n in range(1, max_retries + 1):
             try:
-                raw = ask(llm, system, prompt, CodifyAnswer.model_json_schema())
+                raw = ask(
+                    llm, system, prompt, CodifyAnswer.model_json_schema(),
+                    purpose="import", prompt_version=version, finding_ids=finding_ids,
+                )  # fmt: skip
                 block = CodifyAnswer.model_validate_json(raw).block
             except (LLMError, ValidationError):
+                mark_valid(llm, False)
                 continue
+            mark_valid(llm, True)
             result = attempt(block)
             if result.verified:
                 return Patch(True, result.files, result.output, n, version)

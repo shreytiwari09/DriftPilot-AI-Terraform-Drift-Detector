@@ -7,6 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
+from driftpilot.guardrails import CODE_LIMIT, injection_signals, sanitize_value
 from driftpilot.hcl import (
     add_ignore_changes,
     find_block,
@@ -16,7 +17,7 @@ from driftpilot.hcl import (
 )
 from driftpilot.models import DriftFinding
 from driftpilot.remediate.verify import verify_patch
-from driftpilot.triage.llm import LLMClient, LLMError, ask
+from driftpilot.triage.llm import LLMClient, LLMError, ask, mark_valid
 from driftpilot.triage.llm_triage import load_prompt
 
 
@@ -38,7 +39,11 @@ def _relative(block_path: Path, working_dir: Path) -> str:
 
 
 def codify(
-    llm: LLMClient, working_dir: Path, findings: list[DriftFinding], max_retries: int = 3
+    llm: LLMClient,
+    working_dir: Path,
+    findings: list[DriftFinding],
+    max_retries: int = 3,
+    guardrails: bool = True,
 ) -> Patch:
     """Ask the LLM to rewrite the resource block to match reality; verify; feed errors back."""
     address = findings[0].address
@@ -46,18 +51,27 @@ def codify(
         return Patch(False, {}, "", 0, "refused: a changed value is sensitive and was redacted")
     if any(f.change_kind == "deleted" for f in findings):
         return Patch(False, {}, "", 0, "refused: the resource was deleted; recreate it instead")
+    if guardrails and injection_signals([[f.before, f.after] for f in findings]):
+        return Patch(False, {}, "", 0, "refused: a changed value looks like an injection attempt")
     owner = find_owner_block(working_dir, address)
     if owner is None:
         return Patch(False, {}, "", 0, f"no resource block or module call found for {address}")
     block, is_module_call = owner
 
     version, system = load_prompt("codify")
+    clean = (
+        (lambda v, **kw: sanitize_value(v, CODE_LIMIT, **kw)) if guardrails else (lambda v, **_: v)
+    )
     request = {
         "block_kind": "module_call" if is_module_call else "resource",
         "resource_address": address,
-        "block": block.text,
+        "block": clean(block.text, keep_layout=True),
         "settings": [
-            {"path": f.attribute_path, "code_value": f.before, "real_value": f.after}
+            {
+                "path": clean(f.attribute_path),
+                "code_value": clean(f.before),
+                "real_value": clean(f.after),
+            }
             for f in findings
         ],
     }
@@ -67,11 +81,16 @@ def codify(
     last = Patch(False, {}, "", 0, "")
     for attempt in range(1, max_retries + 1):
         try:
-            raw = ask(llm, system, prompt, CodifyAnswer.model_json_schema())
+            raw = ask(
+                llm, system, prompt, CodifyAnswer.model_json_schema(),
+                purpose="codify", prompt_version=version, finding_ids=[f.id for f in findings],
+            )  # fmt: skip
             new_block = CodifyAnswer.model_validate_json(raw).block
         except (LLMError, ValidationError) as e:
+            mark_valid(llm, False)
             last = Patch(False, {}, str(e)[:500], attempt, f"{version}: no usable answer")
             continue
+        mark_valid(llm, True)
         if new_block.split("{", 1)[0].split() != first_line.split():
             feedback = f"The answer must be the complete block, starting with `{first_line} {{`."
             last = Patch(False, {}, feedback, attempt, f"{version}: wrong shape")

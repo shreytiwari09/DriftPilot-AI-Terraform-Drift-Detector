@@ -116,7 +116,7 @@ def test_scan_uses_llm_for_undecided_findings() -> None:
     with patch("driftpilot.cli.build_llm", return_value=fake):
         result = runner.invoke(app, ["scan", "--plan-json", str(plan)])
     assert result.exit_code == 0, result.output
-    assert "codify" in result.output and "AI (triage-v2)" in result.output
+    assert "codify" in result.output and "AI (triage-v3)" in result.output
     assert len(fake.prompts) == 1
 
 
