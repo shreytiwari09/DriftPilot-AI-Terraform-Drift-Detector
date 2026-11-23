@@ -314,6 +314,6 @@ def test_never_soften_is_explained_in_the_issue() -> None:
 
 def test_table_cells_drop_hidden_text() -> None:
     f = finding()
-    f.after = "visible<!-- hidden --> `x`​"
+    f.after = "visible<!-- hidden --> `x`\u200b"
     body = issue_body(item("revert", "critical", [f]), None, None)
-    assert "hidden" not in body and "​" not in body
+    assert "hidden" not in body and "\u200b" not in body

@@ -14,7 +14,7 @@ CODE_LIMIT = 20000  # longest block of Terraform code shown to a model
 TRUNCATED = "…[truncated]"
 
 # Zero-width and bidirectional control characters: invisible to a reviewer, readable to a model.
-_HIDDEN = re.compile("[​-‏‪-‮⁦-⁩﻿]")
+_HIDDEN = re.compile("[\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]")
 _HTML_COMMENT = re.compile(r"<!--.*?(?:-->|\Z)", re.S)
 _SPACES = re.compile(r"\s+")
 

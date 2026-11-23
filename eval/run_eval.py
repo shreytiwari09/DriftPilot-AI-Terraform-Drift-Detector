@@ -3,6 +3,7 @@
     python eval/run_eval.py                 # all setups (cloud LLM: GEMINI_API_KEY, e.g. .env)
     python eval/run_eval.py --no-llm        # only the setups that need no LLM
     python eval/run_eval.py --stability 0   # skip the prompt-stability repeats
+    python eval/run_eval.py --adversarial-only --max-calls 80   # only the prompt-injection cases
 
 LLM answers are cached in eval/cache/, so re-running is free and gives the same tables. Delete the
 cache (or change the prompt, which changes the cache key) to ask the model again.
@@ -18,9 +19,15 @@ ROOT = Path(__file__).resolve().parents[1]
 
 from driftpilot.config import LLMConfig  # noqa: E402
 from driftpilot.envfile import load_env_file  # noqa: E402
-from driftpilot.evaluation.dataset import load_cases  # noqa: E402
-from driftpilot.evaluation.report import per_case_markdown, summary_markdown  # noqa: E402
+from driftpilot.evaluation.dataset import load_adversarial, load_cases  # noqa: E402
+from driftpilot.evaluation.report import (  # noqa: E402
+    adversarial_markdown,
+    per_case_markdown,
+    splice_section,
+    summary_markdown,
+)
 from driftpilot.evaluation.runner import (  # noqa: E402
+    ADVERSARIAL_SETUPS,
     SETUPS,
     CachingLLM,
     SetupResult,
@@ -84,6 +91,33 @@ LIVE = [
 ]
 
 
+def _setup_json(r: SetupResult) -> dict:
+    return {
+        "setup": r.setup.name,
+        "skipped": r.skipped,
+        "metrics": None if r.skipped else r.metrics(),
+        "attack_stats": None if r.skipped else r.attack_stats(),
+        "llm_calls": r.llm_calls + r.cache_hits,
+        "items": [i.model_dump() for i in r.items],
+    }
+
+
+def run_adversarial(cases, inner, cache: Path, budget: int | None, root: Path, fixtures: Path):
+    """The adversarial setups over the adversarial cases; stops at the first LLM error."""
+    results: list[SetupResult] = []
+    left = budget
+    for setup in ADVERSARIAL_SETUPS:
+        print(f"running (adversarial): {setup.name} ...", file=sys.stderr)
+        llm = CachingLLM(inner, cache, max_calls=left) if inner else None
+        result = run_setup(cases, setup, llm, root, fixtures)
+        if llm is not None and llm.errors:
+            result = SetupResult(setup, skipped=f"stopped, {llm.errors[0]} (no results kept)")
+        if left is not None and llm is not None:
+            left -= llm.calls
+        results.append(result)
+    return results
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
@@ -95,14 +129,40 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--stability", type=int, default=5, help="repeats for prompt stability (0 = off)"
     )
+    parser.add_argument(
+        "--adversarial-only",
+        action="store_true",
+        help="only the prompt-injection cases; updates that section of summary.md",
+    )
+    parser.add_argument("--skip-adversarial", action="store_true", help="skip the injection cases")
+    parser.add_argument(
+        "--max-calls", type=int, default=None, help="cap on new (uncached) adversarial LLM calls"
+    )
     args = parser.parse_args(argv)
 
     load_env_file(ROOT / ".env")
     cases = load_cases(args.cases)
+    adversarial_cases = load_adversarial(args.cases)
     fixtures = ROOT / "tests" / "fixtures"
     inner = None if args.no_llm else build_llm(LLMConfig())
     if inner is None and not args.no_llm:
         print("No LLM key found (GEMINI_API_KEY): LLM setups will be skipped.", file=sys.stderr)
+
+    if args.adversarial_only:
+        results = run_adversarial(
+            adversarial_cases, inner, args.cache, args.max_calls, ROOT, fixtures
+        )
+        section = adversarial_markdown(adversarial_cases, results)
+        args.out.mkdir(parents=True, exist_ok=True)
+        (args.out / "adversarial.md").write_text(section)
+        summary = args.out / "summary.md"
+        old = summary.read_text() if summary.exists() else "# DriftPilot evaluation results\n"
+        summary.write_text(splice_section(old, section))
+        (args.out / "adversarial.json").write_text(
+            json.dumps([_setup_json(r) for r in results], indent=2)
+        )
+        print(section)
+        return
 
     results: list[SetupResult] = []
     for setup in SETUPS:
@@ -124,25 +184,27 @@ def main(argv: list[str] | None = None) -> None:
             repeats=args.stability,
         )
 
+    adversarial = None
+    adversarial_results: list[SetupResult] = []
+    if adversarial_cases and not args.skip_adversarial:
+        adversarial_results = run_adversarial(
+            adversarial_cases, inner, args.cache, args.max_calls, ROOT, fixtures
+        )
+        adversarial = adversarial_markdown(adversarial_cases, adversarial_results)
+
     extras = [*phase3_analytics_check(), "", *LIVE]
     args.out.mkdir(parents=True, exist_ok=True)
     model = inner.model if inner else None
-    (args.out / "summary.md").write_text(summary_markdown(cases, results, stability, extras, model))
+    (args.out / "summary.md").write_text(
+        summary_markdown(cases, results, stability, extras, model, adversarial)
+    )
     (args.out / "per_case.md").write_text(per_case_markdown(results))
     (args.out / "results.json").write_text(
         json.dumps(
             {
                 "model": model,
-                "setups": [
-                    {
-                        "setup": r.setup.name,
-                        "skipped": r.skipped,
-                        "metrics": None if r.skipped else r.metrics(),
-                        "llm_calls": r.llm_calls + r.cache_hits,
-                        "items": [i.model_dump() for i in r.items],
-                    }
-                    for r in results
-                ],
+                "setups": [_setup_json(r) for r in results],
+                "adversarial": [_setup_json(r) for r in adversarial_results],
                 "stability": stability,
             },
             indent=2,

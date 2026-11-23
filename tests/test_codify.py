@@ -165,10 +165,10 @@ def test_codify_refuses_values_that_look_like_an_injection(tmp_path, load_fixtur
 def test_codify_sanitises_what_it_sends(tmp_path, load_fixture) -> None:
     d = docker_dir(tmp_path)
     main = d / "main.tf"
-    main.write_text(main.read_text().replace("memory", "memory​", 1))
+    main.write_text(main.read_text().replace("memory", "memory\u200b", 1))
     fake = FakeLLM(["not json"])
     codify(fake, d, memory_findings(load_fixture), max_retries=1)
-    assert "​" not in fake.prompts[0]
+    assert "\u200b" not in fake.prompts[0]
 
 
 def test_codify_uses_v3_prompt_and_audits(tmp_path, load_fixture) -> None:

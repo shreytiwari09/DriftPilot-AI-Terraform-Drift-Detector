@@ -53,6 +53,7 @@ class Case(BaseModel):
     code_dir: str | None = None
     code: str | None = None
     default: Literal["noise"] | None = None
+    benign: bool = False  # adversarial file only: harmless text that merely looks suspicious
     expect: list[Expected] = Field(default_factory=list)
     file: str = ""
 
@@ -101,9 +102,15 @@ def _drift_entry(d: InlineDrift) -> dict:
     }
 
 
-def load_cases(directory: Path) -> list[Case]:
+ADVERSARIAL_FILE = "adversarial.yaml"  # scored separately, by attack success rate
+
+
+def load_cases(directory: Path, adversarial: bool = False) -> list[Case]:
+    """The labelled cases; `adversarial.yaml` is left out unless asked for."""
     cases: list[Case] = []
     for path in sorted(directory.glob("*.yaml")):
+        if (path.name == ADVERSARIAL_FILE) != adversarial:
+            continue
         for raw in yaml.safe_load(path.read_text()) or []:
             cases.append(Case.model_validate({**raw, "file": path.name}))
     ids = [c.id for c in cases]
@@ -115,3 +122,8 @@ def load_cases(directory: Path) -> list[Case]:
         if sum(inputs) != 1:
             raise ValueError(f"case {c.id}: give exactly one of fixture, drift, unmanaged")
     return cases
+
+
+def load_adversarial(directory: Path) -> list[Case]:
+    """Only the adversarial cases (real drift whose text tries to steer the AI)."""
+    return load_cases(directory, adversarial=True)
