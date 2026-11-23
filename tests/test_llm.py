@@ -3,15 +3,20 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from driftpilot.config import LLMConfig
+from driftpilot.config import LimitsConfig, LLMConfig
+from driftpilot.models import GuardrailEvent
 from driftpilot.triage.llm import (
     DEFAULT_MODELS,
+    AuditingLLM,
+    BudgetedLLM,
     FakeLLM,
     GeminiClient,
     LLMError,
     OllamaClient,
     ask,
     build_llm,
+    guarded,
+    mark_valid,
 )
 
 SCHEMA = {"type": "object"}
@@ -126,3 +131,62 @@ def test_ollama_request_shape() -> None:
     assert body["format"] == SCHEMA
     assert body["stream"] is False
     assert body["messages"][0] == {"role": "system", "content": "sys"}
+
+
+def test_budget_stops_after_max_calls() -> None:
+    llm = BudgetedLLM(FakeLLM(["a", "b", "c"]), max_calls=2, max_chars=10_000)
+    assert llm.complete_json("s", "p", SCHEMA) == "a"
+    assert llm.complete_json("s", "p", SCHEMA) == "b"
+    with pytest.raises(LLMError, match="budget exceeded"):
+        llm.complete_json("s", "p", SCHEMA)
+    assert llm.calls == 2 and "2 LLM calls" in llm.exceeded
+
+
+def test_budget_stops_on_prompt_size() -> None:
+    llm = BudgetedLLM(FakeLLM(["a", "b"]), max_calls=10, max_chars=100)
+    llm.complete_json("s" * 10, "p" * 50, SCHEMA)
+    with pytest.raises(LLMError, match="budget exceeded"):
+        llm.complete_json("s" * 10, "p" * 50, SCHEMA)
+    assert "characters" in llm.exceeded
+
+
+def test_audit_records_hashes_not_text() -> None:
+    llm = AuditingLLM(FakeLLM(['{"ok": 1}']))
+    event = GuardrailEvent(kind="sanitized", finding_id="f1")
+    out = ask(
+        llm, "sys", "secret prompt text", SCHEMA,
+        purpose="codify", prompt_version="codify-v3", finding_ids=["f1"], events=[event],
+    )  # fmt: skip
+    mark_valid(llm, True)
+    assert out == '{"ok": 1}'
+    [record] = llm.collect("run-1")
+    assert (record.run_id, record.purpose, record.prompt_version) == (
+        "run-1",
+        "codify",
+        "codify-v3",
+    )
+    assert record.valid and record.finding_ids == ["f1"] and record.guardrail_events == [event]
+    assert len(record.prompt_sha256) == 64 and len(record.response_sha256) == 64
+    assert "secret prompt text" not in record.model_dump_json()
+
+
+def test_audit_records_failed_calls() -> None:
+    llm = AuditingLLM(FakeLLM([]))
+    with pytest.raises(LLMError):
+        ask(llm, "s", "p", SCHEMA)
+    [record] = llm.collect("r")
+    assert record.valid is False and record.response_sha256 is None and "no more" in record.error
+
+
+def test_guarded_wraps_budget_and_audit() -> None:
+    assert guarded(None, LimitsConfig()) is None
+    llm = guarded(FakeLLM(["a"]), LimitsConfig(max_llm_calls=1))
+    assert isinstance(llm, AuditingLLM) and llm.call_limit == 1
+    ask(llm, "s", "p", SCHEMA)
+    with pytest.raises(LLMError, match="budget exceeded"):
+        ask(llm, "s", "p", SCHEMA)
+    assert llm.budget_exceeded and len(llm.collect("r")) == 2
+
+
+def test_mark_valid_ignores_plain_clients() -> None:
+    mark_valid(FakeLLM([]), True)  # no error

@@ -44,6 +44,22 @@ class ScannersConfig(BaseModel):
     github: GitHubScannerConfig | None = None
 
 
+class GuardrailsConfig(BaseModel):
+    """Content guardrails. Off only to measure their effect (the evaluation); limits stay on."""
+
+    enabled: bool = True
+
+
+class LimitsConfig(BaseModel):
+    """Hard caps that bound what a run can cost or change, even if an LLM misbehaves."""
+
+    max_llm_calls: int = Field(default=60, ge=0)
+    max_prompt_chars: int = Field(default=300_000, ge=0)
+    max_prs: int = Field(default=5, ge=0)
+    max_files_per_pr: int = Field(default=3, ge=1)
+    max_patch_lines: int = Field(default=300, ge=1)
+
+
 class Config(BaseModel):
     severity_overrides: list[SeverityOverride] = []
     ignore: list[str] = []  # address/attribute globs, e.g. "docker_container.*.restart"
@@ -52,6 +68,8 @@ class Config(BaseModel):
     mode: Literal["advise", "open-prs"] = "advise"  # advise = issues only, never PRs
     llm: LLMConfig = LLMConfig()
     scanners: ScannersConfig = ScannersConfig()
+    guardrails: GuardrailsConfig = GuardrailsConfig()
+    limits: LimitsConfig = LimitsConfig()
 
 
 def load_config(path: Path | None, working_dir: Path) -> Config:

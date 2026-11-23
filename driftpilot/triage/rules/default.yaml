@@ -5,7 +5,11 @@
 # First matching rule wins, so noise rules come first. Findings no rule matches go to LLM triage.
 #
 # Predicates: null_to_default, list_reordered, json_equal, decreased,
-#             changed_to: <value>, open_cidr_on_admin_port
+#             changed_to: <value>, open_cidr_on_admin_port, json_wildcard_principal, iam_wildcard
+#
+# `never_soften:` (end of file) lists security weakenings that an LLM verdict may never play down:
+# if the LLM calls one of them "not real", lower than `floor_severity`, or "codify"/"ignore", the policy
+# step overrides it to real, at least the floor, action revert. Entries use the same match/when syntax as rules.
 
 version: 1
 
@@ -210,3 +214,66 @@ rules:
       recommended_action: revert
       confidence: 0.95
       reason: An admin port (SSH or RDP) is now open to 0.0.0.0/0, the whole internet.
+
+
+# Security weakenings the LLM may not soften (guardrail, see triage/policy.py). Each entry: match (type,
+# attribute, change_kind) + optional `when` predicate + the lowest severity the verdict may have.
+never_soften:
+  # ---------- GitHub ----------
+  - { type: "github_branch_protection*", change_kind: deleted, floor_severity: critical,
+      reason: branch protection was deleted }
+  - { type: "github_branch_protection*", attribute: "*required_approving_review_count", when: decreased,
+      floor_severity: critical, reason: required pull request approvals were lowered }
+  - { type: "github_branch_protection*", attribute: allows_force_pushes, when: { changed_to: true },
+      floor_severity: critical, reason: force pushes were allowed on a protected branch }
+  - { type: "github_branch_protection*", attribute: allows_deletions, when: { changed_to: true },
+      floor_severity: critical, reason: deleting a protected branch was allowed }
+  - { type: github_repository_ruleset, change_kind: deleted, floor_severity: critical,
+      reason: a branch ruleset was deleted }
+  - { type: github_repository_ruleset, attribute: "*required_approving_review_count", when: decreased,
+      floor_severity: critical, reason: required approvals in a ruleset were lowered }
+  - { type: github_repository_ruleset, attribute: "rules*.deletion", when: { changed_to: false },
+      floor_severity: critical, reason: a ruleset no longer blocks deleting the branch }
+  - { type: github_repository_ruleset, attribute: "rules*.non_fast_forward", when: { changed_to: false },
+      floor_severity: critical, reason: a ruleset no longer blocks force pushes }
+  - { type: github_repository_ruleset, attribute: enforcement, when: { changed_to: disabled },
+      floor_severity: critical, reason: a ruleset was switched off }
+  - { type: github_repository_ruleset, attribute: enforcement, when: { changed_to: evaluate },
+      floor_severity: critical, reason: a ruleset was switched to report-only }
+  - { type: github_team_repository, attribute: permission, when: { changed_to: admin },
+      floor_severity: high, reason: a team was granted admin access }
+  - { type: github_repository_collaborator, attribute: permission, when: { changed_to: admin },
+      floor_severity: high, reason: a user was granted admin access }
+
+  # ---------- AWS ----------
+  - { type: "aws_*security_group*", attribute: "*", when: open_cidr_on_admin_port,
+      floor_severity: critical, reason: an admin port is open to 0.0.0.0/0 }
+  - { type: aws_s3_bucket_public_access_block, attribute: block_public_acls, when: { changed_to: false },
+      floor_severity: critical, reason: S3 public access block turned off (block_public_acls) }
+  - { type: aws_s3_bucket_public_access_block, attribute: block_public_policy, when: { changed_to: false },
+      floor_severity: critical, reason: S3 public access block turned off (block_public_policy) }
+  - { type: aws_s3_bucket_public_access_block, attribute: ignore_public_acls, when: { changed_to: false },
+      floor_severity: critical, reason: S3 public access block turned off (ignore_public_acls) }
+  - { type: aws_s3_bucket_public_access_block, attribute: restrict_public_buckets, when: { changed_to: false },
+      floor_severity: critical, reason: S3 public access block turned off (restrict_public_buckets) }
+  - { type: aws_s3_bucket_policy, attribute: policy, when: json_wildcard_principal,
+      floor_severity: critical, reason: a bucket policy now allows any principal ("*") }
+  - { type: "aws_iam_*policy", attribute: policy, when: iam_wildcard,
+      floor_severity: critical, reason: an IAM policy now allows a wildcard action or resource }
+  - { type: aws_db_instance, attribute: storage_encrypted, when: { changed_to: false },
+      floor_severity: critical, reason: database storage encryption was turned off }
+  - { type: aws_rds_cluster, attribute: storage_encrypted, when: { changed_to: false },
+      floor_severity: critical, reason: database storage encryption was turned off }
+  - { type: aws_ebs_volume, attribute: encrypted, when: { changed_to: false },
+      floor_severity: critical, reason: volume encryption was turned off }
+  - { type: "aws_s3_bucket_server_side_encryption_configuration", change_kind: deleted,
+      floor_severity: critical, reason: bucket encryption configuration was removed }
+  - { type: aws_db_instance, attribute: publicly_accessible, when: { changed_to: true },
+      floor_severity: critical, reason: a database was made publicly accessible }
+  - { type: aws_rds_cluster_instance, attribute: publicly_accessible, when: { changed_to: true },
+      floor_severity: critical, reason: a database was made publicly accessible }
+  - { type: aws_cloudtrail, attribute: enable_logging, when: { changed_to: false },
+      floor_severity: critical, reason: CloudTrail logging was turned off }
+
+  # ---------- Postgres (added in the database phase) ----------
+  # Row-level security off, a policy dropped, a grant to PUBLIC: types pg_table_rls, pg_policy, pg_grant.

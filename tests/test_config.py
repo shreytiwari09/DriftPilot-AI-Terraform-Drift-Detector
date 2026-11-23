@@ -33,3 +33,21 @@ def test_explicit_path_and_validation(tmp_path: Path) -> None:
     path.write_text("confidence_threshold: 3\n")
     with pytest.raises(ValidationError):
         load_config(path, tmp_path)
+
+
+def test_guardrails_and_limits_defaults(tmp_path: Path) -> None:
+    config = load_config(None, tmp_path)
+    assert config.guardrails.enabled is True
+    limits = config.limits
+    assert (limits.max_llm_calls, limits.max_prompt_chars) == (60, 300_000)
+    assert (limits.max_prs, limits.max_files_per_pr, limits.max_patch_lines) == (5, 3, 300)
+
+
+def test_guardrails_and_limits_from_file(tmp_path: Path) -> None:
+    (tmp_path / ".driftpilot.yml").write_text(
+        "guardrails: {enabled: false}\nlimits: {max_llm_calls: 3, max_prs: 0}\n"
+    )
+    config = load_config(None, tmp_path)
+    assert config.guardrails.enabled is False
+    assert (config.limits.max_llm_calls, config.limits.max_prs) == (3, 0)
+    assert config.limits.max_patch_lines == 300  # untouched defaults stay

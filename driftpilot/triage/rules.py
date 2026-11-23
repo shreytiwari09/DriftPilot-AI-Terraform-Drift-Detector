@@ -11,7 +11,15 @@ from typing import Any, Literal
 import yaml
 from pydantic import BaseModel
 
-from driftpilot.models import Action, Category, DriftFinding, Intent, Severity, Verdict
+from driftpilot.models import (
+    SEVERITY_RANK,
+    Action,
+    Category,
+    DriftFinding,
+    Intent,
+    Severity,
+    Verdict,
+)
 
 ADMIN_PORTS = (22, 3389)
 OPEN_CIDRS = {"0.0.0.0/0", "::/0"}
@@ -30,6 +38,17 @@ class RuleVerdict(BaseModel):
     intent: Intent
     recommended_action: Action
     confidence: float
+    reason: str
+
+
+class NeverSoften(BaseModel):
+    """A security weakening that an LLM verdict may not play down (`never_soften:` in the pack)."""
+
+    type: str = "*"
+    attribute: str = "*"
+    change_kind: Literal["modified", "deleted"] | None = None
+    when: str | dict[str, Any] | None = None
+    floor_severity: Severity
     reason: str
 
 
@@ -119,6 +138,50 @@ def _open_cidr_on_admin_port(f: DriftFinding, _: Any, resource: Any) -> bool:
     return any(_has_open_admin_port(b) for b in blocks or [])
 
 
+def _policy_statements(document: Any) -> list[dict]:
+    """The statements of an IAM-style JSON policy (a JSON string or an already parsed dict)."""
+    try:
+        doc = json.loads(document) if isinstance(document, str) else document
+    except ValueError:
+        return []
+    if not isinstance(doc, dict):
+        return []
+    statements = doc.get("Statement", [])
+    statements = [statements] if isinstance(statements, dict) else statements
+    return [s for s in statements if isinstance(s, dict) and s.get("Effect", "Allow") == "Allow"]
+
+
+def _has_star(value: Any) -> bool:
+    return value == "*" or (isinstance(value, list) and "*" in value)
+
+
+def _wildcard_principal(document: Any) -> bool:
+    for statement in _policy_statements(document):
+        principal = statement.get("Principal")
+        if _has_star(principal) or (
+            isinstance(principal, dict) and _has_star(principal.get("AWS"))
+        ):
+            return True
+    return False
+
+
+def _any_wildcard(document: Any) -> bool:
+    return any(
+        _has_star(s.get("Action")) or _has_star(s.get("Resource"))
+        for s in _policy_statements(document)
+    )
+
+
+def _json_wildcard_principal(f: DriftFinding, _: Any, __: Any) -> bool:
+    """The policy now lets anyone (`Principal: "*"`) in, and did not before."""
+    return _wildcard_principal(f.after) and not _wildcard_principal(f.before)
+
+
+def _iam_wildcard(f: DriftFinding, _: Any, __: Any) -> bool:
+    """The policy now allows `Action: "*"` or `Resource: "*"`, and did not before."""
+    return _any_wildcard(f.after) and not _any_wildcard(f.before)
+
+
 Predicate = Callable[[DriftFinding, Any, Any], bool]
 PREDICATES: dict[str, Predicate] = {
     "null_to_default": _null_to_default,
@@ -127,6 +190,8 @@ PREDICATES: dict[str, Predicate] = {
     "decreased": _decreased,
     "changed_to": _changed_to,
     "open_cidr_on_admin_port": _open_cidr_on_admin_port,
+    "json_wildcard_principal": _json_wildcard_principal,
+    "iam_wildcard": _iam_wildcard,
 }
 
 
@@ -166,16 +231,42 @@ def load_rules(path: Path | None = None) -> list[Rule]:
     return rules
 
 
-def rule_matches(rule: Rule, finding: DriftFinding, resource: Any = None) -> bool:
-    m = rule.match
-    if m.change_kind and finding.change_kind != m.change_kind:
+def _matches(
+    pattern: RuleMatch | NeverSoften,
+    when: str | dict[str, Any] | None,
+    finding: DriftFinding,
+    resource: Any,
+) -> bool:
+    if pattern.change_kind and finding.change_kind != pattern.change_kind:
         return False
-    if not _glob(m.type).match(finding.resource_type):
+    if not _glob(pattern.type).match(finding.resource_type):
         return False
-    if m.attribute != "*" and not _glob(m.attribute).match(finding.attribute_path or ""):
+    if pattern.attribute != "*" and not _glob(pattern.attribute).match(
+        finding.attribute_path or ""
+    ):
         return False
-    predicate, arg = _predicate(rule.when)
+    predicate, arg = _predicate(when)
     return predicate is None or predicate(finding, arg, resource)
+
+
+def rule_matches(rule: Rule, finding: DriftFinding, resource: Any = None) -> bool:
+    return _matches(rule.match, rule.when, finding, resource)
+
+
+def load_never_soften(path: Path | None = None) -> list[NeverSoften]:
+    """The pack's `never_soften:` list (security weakenings an LLM verdict may not play down)."""
+    entries = [NeverSoften.model_validate(e) for e in _rule_pack(path).get("never_soften") or []]
+    for entry in entries:
+        _predicate(entry.when)  # fail fast on typos
+    return entries
+
+
+def never_soften_for(
+    finding: DriftFinding, entries: list[NeverSoften], resource: Any = None
+) -> NeverSoften | None:
+    """The matching entry with the highest floor, or None."""
+    hits = [e for e in entries if _matches(e, e.when, finding, resource)]
+    return max(hits, key=lambda e: SEVERITY_RANK[e.floor_severity], default=None)
 
 
 def apply_rules(

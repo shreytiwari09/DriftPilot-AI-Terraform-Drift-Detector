@@ -1,14 +1,17 @@
 """The only way DriftPilot talks to an LLM (SPEC §4.4). Every prompt is redacted here first."""
 
+import hashlib
 import os
 import re
 import time
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import Any, Protocol
 
 import httpx
 
-from driftpilot.config import LLMConfig
+from driftpilot.config import LimitsConfig, LLMConfig
+from driftpilot.models import AuditRecord, GuardrailEvent
 from driftpilot.redact import scrub_patterns
 
 # Pinned, not "-latest", so verdicts don't change silently. Flash-Lite: ~1.5 s per call and its own
@@ -113,9 +116,115 @@ class FakeLLM:
         return self.responses.pop(0)
 
 
-def ask(client: LLMClient, system: str, prompt: str, schema: dict[str, Any]) -> str:
-    """Send a prompt after redacting it. All DriftPilot LLM calls go through here."""
-    return client.complete_json(system, scrub_patterns(prompt), schema)
+class BudgetedLLM:
+    """Stops a run from making more LLM calls, or sending more text, than its limits allow.
+
+    The error is an `LLMError`, so triage falls back to `investigate` and a person decides.
+    """
+
+    def __init__(self, inner: LLMClient, max_calls: int, max_chars: int) -> None:
+        self.inner = inner
+        self.provider, self.model = inner.provider, inner.model
+        self.max_calls, self.max_chars = max_calls, max_chars
+        self.calls = 0
+        self.chars = 0
+        self.exceeded: str | None = None
+
+    def complete_json(self, system: str, prompt: str, schema: dict[str, Any]) -> str:
+        size = len(system) + len(prompt)
+        if self.calls >= self.max_calls:
+            self.exceeded = f"{self.max_calls} LLM calls per run"
+        elif self.chars + size > self.max_chars:
+            self.exceeded = f"{self.max_chars} prompt characters per run"
+        if self.exceeded:
+            raise LLMError(f"budget exceeded ({self.exceeded}); no more LLM calls this run")
+        self.calls += 1
+        self.chars += size
+        return self.inner.complete_json(system, prompt, schema)
+
+
+class AuditingLLM:
+    """Records every call as an `AuditRecord` (hashes only, never the text)."""
+
+    def __init__(self, inner: LLMClient) -> None:
+        self.inner = inner
+        self.provider, self.model = inner.provider, inner.model
+        self.records: list[AuditRecord] = []
+
+    @property
+    def call_limit(self) -> int | None:
+        return self.inner.max_calls if isinstance(self.inner, BudgetedLLM) else None
+
+    @property
+    def budget_exceeded(self) -> str | None:
+        return self.inner.exceeded if isinstance(self.inner, BudgetedLLM) else None
+
+    def call(
+        self,
+        system: str,
+        prompt: str,
+        schema: dict[str, Any],
+        purpose: str = "triage",
+        prompt_version: str | None = None,
+        finding_ids: Sequence[str] = (),
+        events: Sequence[GuardrailEvent] = (),
+    ) -> str:
+        record = AuditRecord(
+            timestamp=datetime.now(UTC),
+            purpose=purpose,
+            prompt_version=prompt_version,
+            model=self.model,
+            prompt_sha256=hashlib.sha256((system + "\n" + prompt).encode()).hexdigest(),
+            finding_ids=list(finding_ids),
+            guardrail_events=list(events),
+        )
+        self.records.append(record)
+        try:
+            raw = self.inner.complete_json(system, prompt, schema)
+        except LLMError as e:
+            record.error = str(e)[:300]
+            raise
+        record.response_sha256 = hashlib.sha256(raw.encode()).hexdigest()
+        return raw
+
+    def complete_json(self, system: str, prompt: str, schema: dict[str, Any]) -> str:
+        return self.call(system, prompt, schema)
+
+    def collect(self, run_id: str) -> list[AuditRecord]:
+        return [r.model_copy(update={"run_id": run_id}) for r in self.records]
+
+
+def guarded(client: LLMClient | None, limits: LimitsConfig) -> AuditingLLM | None:
+    """The client wrapped with the run's budget and an audit trail (None stays None)."""
+    if client is None:
+        return None
+    return AuditingLLM(BudgetedLLM(client, limits.max_llm_calls, limits.max_prompt_chars))
+
+
+def mark_valid(client: LLMClient, valid: bool) -> None:
+    """Tell an `AuditingLLM` whether its latest answer parsed into the expected model."""
+    if isinstance(client, AuditingLLM) and client.records:
+        client.records[-1].valid = valid
+
+
+def ask(
+    client: LLMClient,
+    system: str,
+    prompt: str,
+    schema: dict[str, Any],
+    purpose: str = "triage",
+    prompt_version: str | None = None,
+    finding_ids: Sequence[str] = (),
+    events: Sequence[GuardrailEvent] = (),
+) -> str:
+    """Send a prompt after redacting it. All DriftPilot LLM calls go through here.
+
+    The keyword details only feed the audit log (when the client is an `AuditingLLM`).
+    """
+    prompt = scrub_patterns(prompt)
+    if isinstance(client, AuditingLLM):
+        return client.call(system, prompt, schema, purpose, prompt_version, finding_ids, events)
+    return client.complete_json(system, prompt, schema)
 
 
 def build_llm(config: LLMConfig) -> LLMClient | None:

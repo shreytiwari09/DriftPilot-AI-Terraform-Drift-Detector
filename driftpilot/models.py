@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 Severity = Literal["critical", "high", "medium", "low", "none"]
+SEVERITY_RANK: dict[str, int] = {"critical": 4, "high": 3, "medium": 2, "low": 1, "none": 0}
 Category = Literal["security", "cost", "availability", "cosmetic"]
 Intent = Literal["likely_hotfix", "likely_accidental", "likely_automation", "unknown"]
 Action = Literal["revert", "codify", "ignore_changes", "import", "recreate", "investigate", "none"]
@@ -62,6 +63,9 @@ class Verdict(BaseModel):
     reason: str
     prompt_version: str | None = None
     rule_id: str | None = None
+    guardrails: list[
+        str
+    ] = []  # e.g. "never-soften", "suspicious-input": why a guardrail changed it
 
 
 class RemediationResult(BaseModel):
@@ -100,6 +104,40 @@ class RunRecord(BaseModel):
     managed_resource_count: int | None = None  # resources in state, for "% ever drifted"
 
 
+GuardrailKind = Literal[
+    "never-soften",
+    "suspicious-input",
+    "sanitized",
+    "budget-exceeded",
+    "pr-limit",
+    "patch-too-large",
+]
+
+
+class GuardrailEvent(BaseModel):
+    """Something a guardrail did during a run, for the audit log and the job summary."""
+
+    kind: GuardrailKind
+    finding_id: str | None = None
+    detail: str = ""
+
+
+class AuditRecord(BaseModel):
+    """One line in audit.jsonl: one LLM call, with hashes instead of the text that was sent."""
+
+    run_id: str = ""
+    timestamp: datetime
+    purpose: str  # triage | codify | import
+    prompt_version: str | None = None
+    model: str
+    prompt_sha256: str
+    response_sha256: str | None = None
+    valid: bool = False  # the answer parsed into the expected model
+    finding_ids: list[str] = []
+    guardrail_events: list[GuardrailEvent] = []
+    error: str | None = None
+
+
 class ScanResult(BaseModel):
     """Everything one `driftpilot scan` produced."""
 
@@ -112,6 +150,9 @@ class ScanResult(BaseModel):
     remediations: list[RemediationResult] = []
     managed_resource_count: int | None = None
     errors: list[str] = []
+    audit: list[AuditRecord] = []
+    guardrail_events: list[GuardrailEvent] = []
+    llm_call_limit: int | None = None  # the run's LLM call budget, for the job summary
 
     def verdict_for(self, finding_id: str) -> Verdict | None:
         return self.verdicts.get(finding_id)

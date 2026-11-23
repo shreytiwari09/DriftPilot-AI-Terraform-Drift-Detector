@@ -1,13 +1,25 @@
 """Policy: fixed rules that have the final say after rules and the LLM (SPEC §4.4 step 3)."""
 
+from functools import cache
+from typing import Any
+
 from pydantic import BaseModel
 
 from driftpilot.config import Config
-from driftpilot.models import Action, DriftFinding, Severity, UnmanagedFinding, Verdict
-from driftpilot.triage.rules import glob_match
+from driftpilot.guardrails import injection_signals
+from driftpilot.models import (
+    SEVERITY_RANK,
+    Action,
+    DriftFinding,
+    GuardrailEvent,
+    Severity,
+    UnmanagedFinding,
+    Verdict,
+)
+from driftpilot.triage.rules import NeverSoften, glob_match, load_never_soften, never_soften_for
 
-SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1, "none": 0}
 PR_ACTIONS = {"codify", "ignore_changes", "import"}
+SOFT_ACTIONS = {"codify", "ignore_changes", "none"}  # actions that accept or hide a change
 
 
 def _target(f: DriftFinding) -> str:
@@ -37,14 +49,77 @@ def unmanaged_verdict(u: UnmanagedFinding) -> Verdict:
     )
 
 
+@cache
+def _never_soften_list() -> list[NeverSoften]:
+    return load_never_soften()
+
+
+def _never_soften(
+    f: DriftFinding, v: Verdict, resource: Any, events: list[GuardrailEvent]
+) -> Verdict:
+    """An LLM verdict softer than the floor for a known security weakening is overridden.
+
+    The model can still be stricter (higher severity, investigate); never softer.
+    """
+    entry = never_soften_for(f, _never_soften_list(), resource)
+    if entry is None or v.source != "llm":
+        return v
+    floor = entry.floor_severity
+    soft = (
+        not v.is_real_drift
+        or SEVERITY_RANK[v.severity] < SEVERITY_RANK[floor]
+        or v.recommended_action in SOFT_ACTIONS
+    )
+    if not soft:
+        return v
+    events.append(GuardrailEvent(kind="never-soften", finding_id=f.id, detail=entry.reason))
+    keep_action = v.is_real_drift and v.recommended_action in ("revert", "recreate", "investigate")
+    return _with(
+        v,
+        f"guardrail: never-soften ({entry.reason})",
+        is_real_drift=True,
+        severity=max(v.severity, floor, key=SEVERITY_RANK.__getitem__),
+        recommended_action=v.recommended_action if keep_action else "revert",
+        guardrails=[*v.guardrails, "never-soften"],
+    )
+
+
+def _suspicious(
+    f: DriftFinding, v: Verdict, events: list[GuardrailEvent], by_rule_or_llm: bool
+) -> Verdict:
+    """Text that looks like an injection attempt can never make a change "not real" or "none"."""
+    signals = injection_signals([f.address, f.attribute_path, f.before, f.after])
+    if not signals or not by_rule_or_llm:
+        return v
+    events.append(
+        GuardrailEvent(kind="suspicious-input", finding_id=f.id, detail=", ".join(signals))
+    )
+    changes: dict[str, Any] = {"guardrails": [*v.guardrails, "suspicious-input"]}
+    if not v.is_real_drift or v.recommended_action in SOFT_ACTIONS:
+        changes |= {"is_real_drift": True, "recommended_action": "investigate"}
+        if not v.is_real_drift:
+            changes["severity"] = max(v.severity, "medium", key=SEVERITY_RANK.__getitem__)
+    note = f"guardrail: suspicious input ({', '.join(signals)}); a person should review it"
+    return _with(v, note, **changes)
+
+
 def apply_policy(
     findings: list[DriftFinding],
     unmanaged: list[UnmanagedFinding],
     verdicts: dict[str, Verdict],
     config: Config,
+    resources: dict[str, Any] | None = None,
+    events: list[GuardrailEvent] | None = None,
 ) -> dict[str, Verdict]:
-    """Return verdicts with config ignores, severity overrides and the confidence floor applied."""
+    """Return verdicts with config ignores, guardrails, severity overrides and the confidence floor.
+
+    `resources` (drifted resources by address) gives rules like open-admin-port their context;
+    `events` collects what the guardrails did.
+    """
     out = dict(verdicts)
+    resources = resources or {}
+    events = events if events is not None else []
+    guard = config.guardrails.enabled
     for f in findings:
         v = out.get(f.id)
         if v is None:
@@ -58,6 +133,10 @@ def apply_policy(
                 recommended_action="none",
             )
             continue
+        if guard:
+            by_rule_or_llm = v.source in ("rule", "llm")
+            v = _never_soften(f, v, resources.get(f.address), events)
+            v = _suspicious(f, v, events, by_rule_or_llm)
         for override in config.severity_overrides:
             type_ok = glob_match(override.match.get("type", "*"), f.resource_type)
             attr_ok = glob_match(override.match.get("attribute", "*"), f.attribute_path or "")
@@ -78,7 +157,20 @@ def apply_policy(
             )
         out[f.id] = v
     for u in unmanaged:
-        out.setdefault(u.id, unmanaged_verdict(u))
+        if u.id in out:
+            continue
+        v = unmanaged_verdict(u)
+        if guard and (signals := injection_signals([u.name, u.resource_kind])):
+            events.append(
+                GuardrailEvent(kind="suspicious-input", finding_id=u.id, detail=", ".join(signals))
+            )
+            v = _with(
+                v,
+                f"guardrail: suspicious input ({', '.join(signals)}); a person should review it",
+                recommended_action="investigate",
+                guardrails=["suspicious-input"],
+            )
+        out[u.id] = v
     return out
 
 
@@ -126,7 +218,8 @@ def plan_remediations(
         severity = max((v.severity for v in group_verdicts), key=SEVERITY_RANK.__getitem__)
         items.append((address, action, severity, [f.id for f in group]))
     for u in unmanaged:
-        items.append((f"{u.resource_kind}:{u.name}", "import", verdicts[u.id].severity, [u.id]))
+        v = verdicts[u.id]
+        items.append((f"{u.resource_kind}:{u.name}", v.recommended_action, v.severity, [u.id]))
 
     plans = []
     for address, action, severity, ids in items:
