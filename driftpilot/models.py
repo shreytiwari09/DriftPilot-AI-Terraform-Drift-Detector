@@ -79,6 +79,19 @@ class RemediationResult(BaseModel):
     finding_ids: list[str] = []  # every finding this one issue/PR covers (one per resource)
 
 
+DriftType = Literal["infrastructure", "database"]
+
+
+class Context(BaseModel):
+    """Who owns a finding and where it lives. Fields default, so old history lines still load."""
+
+    team: str = "unowned"
+    repo: str = "unknown"
+    environment: str = "unknown"
+    account: str = "unknown"  # masked (12-digit IDs and ARNs never stored)
+    drift_type: DriftType = "infrastructure"
+
+
 class HistoryEvent(BaseModel):
     """One line in drift-events.jsonl."""
 
@@ -88,6 +101,7 @@ class HistoryEvent(BaseModel):
     verdict: Verdict
     remediation: RemediationResult | None = None
     human_outcome: Literal["accepted", "overruled", "pending"] = "pending"
+    context: Context = Context()
 
 
 class RunRecord(BaseModel):
@@ -102,6 +116,11 @@ class RunRecord(BaseModel):
     unmanaged_count: int
     noise_count: int
     managed_resource_count: int | None = None  # resources in state, for "% ever drifted"
+    repo: str = "unknown"
+    environment: str = "unknown"
+    drift_type: DriftType = "infrastructure"
+    managed_by_team: dict[str, int] = {}  # for per-team coverage and drift rate
+    unmanaged_by_team: dict[str, int] = {}
 
 
 GuardrailKind = Literal[
@@ -149,6 +168,9 @@ class ScanResult(BaseModel):
     verdicts: dict[str, Verdict] = {}  # keyed by finding id; missing = needs triage
     remediations: list[RemediationResult] = []
     managed_resource_count: int | None = None
+    context: Context = Context()  # repo, environment, account, drift type of this run
+    teams: dict[str, str] = {}  # owning team per finding id (missing = context.team)
+    managed_by_team: dict[str, int] = {}
     errors: list[str] = []
     audit: list[AuditRecord] = []
     guardrail_events: list[GuardrailEvent] = []

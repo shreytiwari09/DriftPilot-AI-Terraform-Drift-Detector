@@ -7,6 +7,7 @@ from pathlib import Path
 
 from driftpilot.collector import (
     managed_resource_count,
+    managed_resources,
     parse_plan,
     refresh_only_plan,
     resource_values,
@@ -15,6 +16,7 @@ from driftpilot.collector import (
 )
 from driftpilot.config import Config
 from driftpilot.models import GuardrailEvent, ScanResult, UnmanagedFinding
+from driftpilot.ownership import apply_ownership
 from driftpilot.scanners import build_scanners
 from driftpilot.scanners.base import find_unmanaged
 from driftpilot.triage.llm import AuditingLLM, LLMClient
@@ -111,5 +113,6 @@ def run_scan(
         resources,
         result.guardrail_events,
     )
+    apply_ownership(result, config, working_dir, resources, managed_resources(plan))
     attach_audit(result, llm)
     return result

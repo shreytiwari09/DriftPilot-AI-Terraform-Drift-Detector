@@ -160,9 +160,16 @@ def records_from_scan(result: ScanResult) -> tuple[list[HistoryEvent], RunRecord
             finding=f,
             verdict=result.verdicts.get(f.id) or _untriaged(f.id),
             remediation=by_finding.get(f.id),
+            context=result.context.model_copy(
+                update={"team": result.teams.get(f.id, result.context.team)}
+            ),
         )
         for f in [*result.real_findings, *result.unmanaged]
     ]
+    unmanaged_by_team: dict[str, int] = {}
+    for u in result.unmanaged:
+        team = result.teams.get(u.id, result.context.team)
+        unmanaged_by_team[team] = unmanaged_by_team.get(team, 0) + 1
     c = counts(result)
     run = RunRecord(
         run_id=result.run_id,
@@ -174,6 +181,11 @@ def records_from_scan(result: ScanResult) -> tuple[list[HistoryEvent], RunRecord
         unmanaged_count=len(result.unmanaged),
         noise_count=c["noise"],
         managed_resource_count=result.managed_resource_count,
+        repo=result.context.repo,
+        environment=result.context.environment,
+        drift_type=result.context.drift_type,
+        managed_by_team=result.managed_by_team,
+        unmanaged_by_team=unmanaged_by_team,
     )
     return events, run
 

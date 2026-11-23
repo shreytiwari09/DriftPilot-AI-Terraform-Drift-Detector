@@ -15,6 +15,7 @@ from driftpilot.models import RemediationResult, ScanResult
 from driftpilot.triage.rules import apply_rules, load_rules
 
 NOW = datetime(2026, 10, 25, tzinfo=UTC)
+FIXTURES_DIR = Path(__file__).parent / "fixtures"
 
 
 def scan(plan: dict) -> ScanResult:
@@ -142,3 +143,27 @@ def test_verdict_guardrails_round_trip_and_default(load_fixture) -> None:
     old = json.loads(event.model_dump_json())
     del old["verdict"]["guardrails"]  # a line written before the field existed
     assert HistoryEvent.model_validate_json(json.dumps(old)).verdict.guardrails == []
+
+
+def test_events_and_run_carry_context(tmp_path: Path, load_fixture) -> None:
+    from driftpilot.config import Config, OwnershipConfig, TeamRule
+    from driftpilot.scan import run_scan
+
+    plan = FIXTURES_DIR / "github/s2_required_approvals_reduced.json"
+    config = Config(
+        ownership=OwnershipConfig(
+            teams=[TeamRule(match="github_branch_protection.*", team="security")],
+            environment="prod",
+            repo="acme/infra",
+        )
+    )
+    result = run_scan(tmp_path, config, plan_json=plan)
+    events, run = records_from_scan(result)
+    assert {e.context.team for e in events} == {"security"}
+    assert events[0].context.environment == "prod" and events[0].context.repo == "acme/infra"
+    assert (run.repo, run.environment, run.drift_type) == ("acme/infra", "prod", "infrastructure")
+    assert sum(run.managed_by_team.values()) == run.managed_resource_count
+    store = LocalStore(tmp_path / "h")
+    append_scan(store, result)
+    assert store.load_events()[0].context.team == "security"
+    assert store.load_runs()[0].managed_by_team == run.managed_by_team

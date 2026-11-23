@@ -60,6 +60,25 @@ class LimitsConfig(BaseModel):
     max_patch_lines: int = Field(default=300, ge=1)
 
 
+class TeamRule(BaseModel):
+    match: str  # glob on the resource address, e.g. "github_repository.payments-*"
+    team: str
+
+
+class OwnershipConfig(BaseModel):
+    """Who owns what, and where this repo's Terraform runs (shown as filters on the dashboard)."""
+
+    teams: list[TeamRule] = []
+    default_team: str | None = None
+    environment: str | None = None
+    account: str | None = None
+    repo: str | None = None  # default: $GITHUB_REPOSITORY
+
+
+class DashboardConfig(BaseModel):
+    publish_addresses: bool = True  # false: resource addresses become stable hashes in data.json
+
+
 class Config(BaseModel):
     severity_overrides: list[SeverityOverride] = []
     ignore: list[str] = []  # address/attribute globs, e.g. "docker_container.*.restart"
@@ -70,6 +89,8 @@ class Config(BaseModel):
     scanners: ScannersConfig = ScannersConfig()
     guardrails: GuardrailsConfig = GuardrailsConfig()
     limits: LimitsConfig = LimitsConfig()
+    ownership: OwnershipConfig = OwnershipConfig()
+    dashboard: DashboardConfig = DashboardConfig()
 
 
 def load_config(path: Path | None, working_dir: Path) -> Config:

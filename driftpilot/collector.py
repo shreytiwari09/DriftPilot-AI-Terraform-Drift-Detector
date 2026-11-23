@@ -70,17 +70,23 @@ def show_state(working_dir: Path, timeout: int = DEFAULT_TIMEOUT) -> dict[str, A
     return json.loads(shown.stdout)
 
 
-def managed_resource_count(plan: dict[str, Any]) -> int | None:
+def managed_resources(plan: dict[str, Any]) -> list[dict[str, Any]] | None:
     """Managed resources in the plan's prior state (all modules), or None if absent."""
     root = (plan.get("prior_state") or {}).get("values", {}).get("root_module")
     if root is None:
         return None
-    count, modules = 0, [root]
+    found, modules = [], [root]
     while modules:
         module = modules.pop()
-        count += sum(1 for r in module.get("resources", []) if r.get("mode") == "managed")
+        found += [r for r in module.get("resources", []) if r.get("mode") == "managed"]
         modules.extend(module.get("child_modules", []))
-    return count
+    return found
+
+
+def managed_resource_count(plan: dict[str, Any]) -> int | None:
+    """How many managed resources the plan's prior state holds, or None if absent."""
+    found = managed_resources(plan)
+    return None if found is None else len(found)
 
 
 def finding_id(address: str, attribute_path: str | None) -> str:
