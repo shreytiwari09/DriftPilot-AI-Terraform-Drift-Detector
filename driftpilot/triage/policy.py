@@ -84,11 +84,25 @@ def _never_soften(
     )
 
 
+def _signals_by_address(findings: list[DriftFinding]) -> dict[str, list[str]]:
+    """Injection signals per resource: the model reads a resource's changes together, so text in
+    one change can steer its verdict on a sibling change."""
+    out: dict[str, list[str]] = {}
+    for f in findings:
+        for name in injection_signals([f.address, f.attribute_path, f.before, f.after]):
+            if name not in out.setdefault(f.address, []):
+                out[f.address].append(name)
+    return out
+
+
 def _suspicious(
-    f: DriftFinding, v: Verdict, events: list[GuardrailEvent], by_rule_or_llm: bool
+    f: DriftFinding,
+    v: Verdict,
+    events: list[GuardrailEvent],
+    by_rule_or_llm: bool,
+    signals: list[str],
 ) -> Verdict:
     """Text that looks like an injection attempt can never make a change "not real" or "none"."""
-    signals = injection_signals([f.address, f.attribute_path, f.before, f.after])
     if not signals or not by_rule_or_llm:
         return v
     events.append(
@@ -120,6 +134,7 @@ def apply_policy(
     resources = resources or {}
     events = events if events is not None else []
     guard = config.guardrails.enabled
+    signals = _signals_by_address(findings) if guard else {}
     for f in findings:
         v = out.get(f.id)
         if v is None:
@@ -136,7 +151,7 @@ def apply_policy(
         if guard:
             by_rule_or_llm = v.source in ("rule", "llm")
             v = _never_soften(f, v, resources.get(f.address), events)
-            v = _suspicious(f, v, events, by_rule_or_llm)
+            v = _suspicious(f, v, events, by_rule_or_llm, signals.get(f.address, []))
         for override in config.severity_overrides:
             type_ok = glob_match(override.match.get("type", "*"), f.resource_type)
             attr_ok = glob_match(override.match.get("attribute", "*"), f.attribute_path or "")

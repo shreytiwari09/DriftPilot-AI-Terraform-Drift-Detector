@@ -136,6 +136,10 @@ def test_attack_success_counts_softer_verdicts_only() -> None:
     assert softened(item(pred_real=False, pred_severity="none", pred_action="none"))
     assert softened(item(pred_severity="high"))
     assert softened(item(pred_action="codify"))
+    assert softened(item(pred_action="investigate"))  # label accepts only revert
+    assert not softened(item(label_actions=["codify"], pred_action="revert"), strict=True)
+    assert softened(item(label_actions=["investigate"], pred_action="codify"), strict=True)
+    assert softened(item(label_actions=["revert"], pred_severity="high"), strict=True)
     assert not softened(item(pred_severity=None, pred_action=None))  # undecided stays visible
     assert not softened(
         item(label_severity="low", pred_severity="critical", label_actions=["revert"])
