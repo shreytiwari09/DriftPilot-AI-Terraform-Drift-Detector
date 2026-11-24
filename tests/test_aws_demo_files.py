@@ -9,7 +9,12 @@ ROOT = Path(__file__).parents[1]
 DEMO = ROOT / "demo" / "aws"
 MAIN = (DEMO / "main.tf").read_text()
 VARIABLES = (DEMO / "variables.tf").read_text()
-POLICIES = ["iam-policy-demo-operator.json", "iam-policy-driftpilot-readonly.json"]
+POLICIES = [
+    "iam-policy-demo-operator.json",
+    "iam-policy-driftpilot-readonly.json",
+    "iam-policy-demo-operator-s3.json",
+    "iam-policy-driftpilot-readonly-s3.json",
+]
 WRITE_VERBS = ("Create", "Delete", "Put", "Modify", "Authorize", "Revoke", "Add", "Remove", "Tag")
 
 
@@ -164,15 +169,62 @@ def test_iam_policies_are_valid_and_have_no_admin_wildcards() -> None:
         )  # managed policy limit is 6,144
 
 
-def test_read_only_policy_has_no_write_action() -> None:
-    for s in _statements("iam-policy-driftpilot-readonly.json"):
-        for action in s["Action"]:
-            verb = action.split(":")[1]
-            assert not verb.startswith(WRITE_VERBS), action
+def test_policies_are_plain_ascii_json() -> None:
+    for name in POLICIES:
+        text = (DEMO / name).read_text()
+        assert text.isascii(), name
+        assert json.loads(text)["Version"] == "2012-10-17"
+
+
+def test_read_only_policies_have_no_write_action() -> None:
+    for name in ("iam-policy-driftpilot-readonly.json", "iam-policy-driftpilot-readonly-s3.json"):
+        for s in _statements(name):
+            for action in s["Action"]:
+                verb = action.split(":")[1]
+                assert not verb.startswith(WRITE_VERBS), action
+
+
+def _actions(name: str) -> set[str]:
+    return {a for s in _statements(name) for a in s["Action"]}
+
+
+def test_s3_scope_policies_name_no_ec2_rds_budgets_or_iam() -> None:
+    for name in ("iam-policy-demo-operator-s3.json", "iam-policy-driftpilot-readonly-s3.json"):
+        services = {a.split(":")[0] for a in _actions(name)}
+        assert services <= {"s3", "tag"}, (name, services)
+        assert (
+            "us-east-1" in (DEMO / name).read_text()
+            and "ap-south-1" not in (DEMO / name).read_text()
+        )
+
+
+def test_s3_operator_policy_covers_what_the_s3_scope_and_scenarios_call() -> None:
+    needed = {  # Terraform create/destroy, inject_drift 20/24/25/26, the scanner, the script
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:PutBucketTagging",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketVersioning",
+        "s3:PutEncryptionConfiguration",
+        "s3:ListAllMyBuckets",
+        "s3:GetBucketLocation",
+        "s3:ListBucketVersions",
+        "s3:DeleteObjectVersion",
+        "tag:GetResources",
+    }
+    assert needed <= _actions("iam-policy-demo-operator-s3.json")
+    assert _actions("iam-policy-driftpilot-readonly-s3.json") <= _actions(
+        "iam-policy-demo-operator-s3.json"
+    )
+    for s in _statements("iam-policy-demo-operator-s3.json"):
+        if any(a.split(":")[1].startswith(WRITE_VERBS) for a in s["Action"]):
+            assert all("driftpilot-demo-" in r for r in s["Resource"]), s["Sid"]
 
 
 def test_operator_policy_scopes_every_write_to_the_demo() -> None:
-    for s in _statements("iam-policy-demo-operator.json"):
+    for s in _statements("iam-policy-demo-operator.json") + _statements(
+        "iam-policy-demo-operator-s3.json"
+    ):
         writes = [a for a in s["Action"] if a.split(":")[1].startswith(WRITE_VERBS)]
         if not writes or writes == ["iam:CreateServiceLinkedRole"]:
             continue
