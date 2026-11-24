@@ -46,7 +46,7 @@ export default function FindingsTable({ rows, onOpen, compact = false }: { rows:
   return (
     <div>
       <div className="scroll-x rounded-xl border border-line">
-        <table className="w-full min-w-[520px] border-collapse text-left text-sm">
+        <table className="w-full sm:min-w-[520px] border-collapse text-left text-sm">
           <caption className="sr-only">Drift episodes. Press Enter on a row to see details.</caption>
           <thead className="bg-sunken text-xs text-mute">
             <tr>
@@ -58,7 +58,7 @@ export default function FindingsTable({ rows, onOpen, compact = false }: { rows:
                   </button>
                 </th>
               ))}
-              <th scope="col" className="px-3 py-2 text-right font-semibold">Links</th>
+              <th scope="col" className="hidden px-3 py-2 text-right font-semibold sm:table-cell">Links</th>
             </tr>
           </thead>
           <tbody>
@@ -66,7 +66,7 @@ export default function FindingsTable({ rows, onOpen, compact = false }: { rows:
               <tr key={episodeKey(e)} tabIndex={0} onClick={() => onOpen(e)} onKeyDown={(ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onOpen(e); } }}
                 className="cursor-pointer border-t border-line transition hover:bg-sunken/70 focus-visible:bg-sunken">
                 <td className="whitespace-nowrap px-3 py-2.5"><SeverityBadge severity={e.severity} /></td>
-                <td className="max-w-[260px] px-3 py-2.5">
+                <td className="max-w-[150px] px-3 py-2.5 sm:max-w-[260px]">
                   <div className="truncate font-mono text-xs font-medium" title={e.address}>{e.address}</div>
                   {e.attribute && <div className="truncate font-mono text-[11px] text-mute" title={e.attribute}>{e.attribute}</div>}
                 </td>
@@ -77,7 +77,7 @@ export default function FindingsTable({ rows, onOpen, compact = false }: { rows:
                 <td className={`px-3 py-2.5 ${compact ? 'hidden' : 'hidden lg:table-cell'}`}>{e.decidedBy}</td>
                 <td className={`px-3 py-2.5 ${compact ? 'hidden' : 'hidden xl:table-cell'}`}>{e.outcome}</td>
                 <td className="hidden whitespace-nowrap px-3 py-2.5 text-mute sm:table-cell">{shortDate(e.start)}</td>
-                <td className="whitespace-nowrap px-3 py-2.5 text-right" onClick={(ev) => ev.stopPropagation()} onKeyDown={(ev) => ev.stopPropagation()}>
+                <td className="hidden whitespace-nowrap px-3 py-2.5 text-right sm:table-cell" onClick={(ev) => ev.stopPropagation()} onKeyDown={(ev) => ev.stopPropagation()}>
                   <span className="inline-flex gap-1.5">
                     <ExternalLink href={e.issueUrl} className="btn !min-h-[28px] !px-2 text-xs" icon="external" hint="Opens the issue on GitHub in a new tab. GitHub asks you to log in; nothing changes until you act there.">Issue</ExternalLink>
                     <ExternalLink href={e.prUrl} className="btn !min-h-[28px] !px-2 text-xs" icon="external" hint="Opens the pull request on GitHub in a new tab. A person reviews and merges it.">PR</ExternalLink>
