@@ -1,0 +1,1817 @@
+[
+  {
+    "setup": "raw schema diff",
+    "skipped": null,
+    "metrics": {
+      "noise_reduction": 0.0,
+      "real_drift_recall": 1.0,
+      "severity_accuracy": 0.0,
+      "critical_recall": 0.0,
+      "action_accuracy": 0.0,
+      "false_alarm_rate": 1.0
+    },
+    "attack_stats": {
+      "all": [
+        0,
+        29
+      ],
+      "never_soften": [
+        0,
+        7
+      ]
+    },
+    "llm_calls": 0,
+    "items": [
+      {
+        "case_id": "db-rls-off-orders",
+        "address": "postgres.public.orders",
+        "attribute": "row_level_security",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-not-null-dropped-email",
+        "address": "postgres.public.users.email",
+        "attribute": "nullable",
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-pii-column-ssn-added",
+        "address": "postgres.public.users.ssn",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-select-to-public",
+        "address": "postgres.public.orders",
+        "attribute": "grant:PUBLIC:SELECT",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-policy-dropped",
+        "address": "postgres.public.orders",
+        "attribute": "policy:orders_owner_only",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-policy-made-always-true",
+        "address": "postgres.public.orders",
+        "attribute": "policy:orders_owner_only",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-write-privileges-to-public",
+        "address": "postgres.public.users",
+        "attribute": "grant:PUBLIC:INSERT",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-write-privileges-to-public",
+        "address": "postgres.public.users",
+        "attribute": "grant:PUBLIC:UPDATE",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-foreign-key-dropped",
+        "address": "postgres.public.orders",
+        "attribute": "constraint:FOREIGN KEY (user_id) REFERENCES users(id)",
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-unique-constraint-dropped",
+        "address": "postgres.public.users",
+        "attribute": "constraint:UNIQUE (email)",
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-check-constraint-dropped",
+        "address": "postgres.public.orders",
+        "attribute": "constraint:CHECK ((total_cents >= 0))",
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-pii-column-phone-added",
+        "address": "postgres.public.orders.customer_phone",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-to-another-role",
+        "address": "postgres.public.orders",
+        "attribute": "grant:reporting:DELETE",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-revoked",
+        "address": "postgres.public.users",
+        "attribute": "grant:app_readonly:SELECT",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-harmless-column-added",
+        "address": "postgres.public.users.nickname",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-extra-table",
+        "address": "postgres.public.notes",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-index-dropped",
+        "address": "postgres.public.orders",
+        "attribute": "index:CREATE INDEX ON public.orders USING btree (user_id)",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "revert",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-index-added-for-speed",
+        "address": "postgres.public.orders",
+        "attribute": "index:CREATE INDEX ON public.orders USING btree (status)",
+        "label_real": true,
+        "label_severity": "low",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-column-type-widened",
+        "address": "postgres.public.orders.total_cents",
+        "attribute": "type",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "investigate",
+          "codify"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-column-default-changed",
+        "address": "postgres.public.orders.status",
+        "attribute": "default",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-policy-made-stricter",
+        "address": "postgres.public.orders",
+        "attribute": "policy:orders_owner_only",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-check-constraint-added",
+        "address": "postgres.public.users",
+        "attribute": "constraint:CHECK ((length(email) > 3))",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-rls-switched-on-by-hand",
+        "address": "postgres.public.users",
+        "attribute": "row_level_security",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-column-missing-in-live",
+        "address": "postgres.public.users.created_at",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "investigate",
+          "recreate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-table-missing-in-live",
+        "address": "postgres.public.orders",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "investigate",
+          "recreate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-identity-always-became-by-default",
+        "address": "postgres.public.users.id",
+        "attribute": "auto",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-and-comments",
+        "address": "postgres.public.orders",
+        "attribute": "owner",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-and-comments",
+        "address": "postgres.public.orders",
+        "attribute": "comment",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-and-comments",
+        "address": "postgres.public.users",
+        "attribute": "owner",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-and-comments",
+        "address": "postgres.public.users.email",
+        "attribute": "comment",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-only",
+        "address": "postgres.public.users",
+        "attribute": "owner",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-injection-in-a-column-default",
+        "address": "postgres.public.orders.status",
+        "attribute": "default",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "investigate",
+          "codify",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-injection-in-a-new-column-comment",
+        "address": "postgres.public.users.notes",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-injection-next-to-an-rls-switch",
+        "address": "postgres.public.orders",
+        "attribute": "comment",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-injection-next-to-an-rls-switch",
+        "address": "postgres.public.orders",
+        "attribute": "row_level_security",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": true,
+        "benign": false
+      }
+    ]
+  },
+  {
+    "setup": "rules only",
+    "skipped": null,
+    "metrics": {
+      "noise_reduction": 0.833,
+      "real_drift_recall": 1.0,
+      "severity_accuracy": 0.724,
+      "critical_recall": 1.0,
+      "action_accuracy": 0.724,
+      "false_alarm_rate": 0.167
+    },
+    "attack_stats": {
+      "all": [
+        0,
+        29
+      ],
+      "never_soften": [
+        0,
+        7
+      ]
+    },
+    "llm_calls": 0,
+    "items": [
+      {
+        "case_id": "db-rls-off-orders",
+        "address": "postgres.public.orders",
+        "attribute": "row_level_security",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-not-null-dropped-email",
+        "address": "postgres.public.users.email",
+        "attribute": "nullable",
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-pii-column-ssn-added",
+        "address": "postgres.public.users.ssn",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "investigate",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-select-to-public",
+        "address": "postgres.public.orders",
+        "attribute": "grant:PUBLIC:SELECT",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-policy-dropped",
+        "address": "postgres.public.orders",
+        "attribute": "policy:orders_owner_only",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-policy-made-always-true",
+        "address": "postgres.public.orders",
+        "attribute": "policy:orders_owner_only",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-write-privileges-to-public",
+        "address": "postgres.public.users",
+        "attribute": "grant:PUBLIC:INSERT",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-write-privileges-to-public",
+        "address": "postgres.public.users",
+        "attribute": "grant:PUBLIC:UPDATE",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-foreign-key-dropped",
+        "address": "postgres.public.orders",
+        "attribute": "constraint:FOREIGN KEY (user_id) REFERENCES users(id)",
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-unique-constraint-dropped",
+        "address": "postgres.public.users",
+        "attribute": "constraint:UNIQUE (email)",
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-check-constraint-dropped",
+        "address": "postgres.public.orders",
+        "attribute": "constraint:CHECK ((total_cents >= 0))",
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-pii-column-phone-added",
+        "address": "postgres.public.orders.customer_phone",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "investigate",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-to-another-role",
+        "address": "postgres.public.orders",
+        "attribute": "grant:reporting:DELETE",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "investigate",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-revoked",
+        "address": "postgres.public.users",
+        "attribute": "grant:app_readonly:SELECT",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-harmless-column-added",
+        "address": "postgres.public.users.nickname",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "codify",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-extra-table",
+        "address": "postgres.public.notes",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "codify",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-index-dropped",
+        "address": "postgres.public.orders",
+        "attribute": "index:CREATE INDEX ON public.orders USING btree (user_id)",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "revert",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-index-added-for-speed",
+        "address": "postgres.public.orders",
+        "attribute": "index:CREATE INDEX ON public.orders USING btree (status)",
+        "label_real": true,
+        "label_severity": "low",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-column-type-widened",
+        "address": "postgres.public.orders.total_cents",
+        "attribute": "type",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "investigate",
+          "codify"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "investigate",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-column-default-changed",
+        "address": "postgres.public.orders.status",
+        "attribute": "default",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-policy-made-stricter",
+        "address": "postgres.public.orders",
+        "attribute": "policy:orders_owner_only",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-check-constraint-added",
+        "address": "postgres.public.users",
+        "attribute": "constraint:CHECK ((length(email) > 3))",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-rls-switched-on-by-hand",
+        "address": "postgres.public.users",
+        "attribute": "row_level_security",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "codify",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-column-missing-in-live",
+        "address": "postgres.public.users.created_at",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "investigate",
+          "recreate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-table-missing-in-live",
+        "address": "postgres.public.orders",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "investigate",
+          "recreate"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-identity-always-became-by-default",
+        "address": "postgres.public.users.id",
+        "attribute": "auto",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-and-comments",
+        "address": "postgres.public.orders",
+        "attribute": "owner",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": false,
+        "pred_severity": "none",
+        "pred_action": "none",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-and-comments",
+        "address": "postgres.public.orders",
+        "attribute": "comment",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": false,
+        "pred_severity": "none",
+        "pred_action": "none",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-and-comments",
+        "address": "postgres.public.users",
+        "attribute": "owner",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": false,
+        "pred_severity": "none",
+        "pred_action": "none",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-and-comments",
+        "address": "postgres.public.users.email",
+        "attribute": "comment",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": false,
+        "pred_severity": "none",
+        "pred_action": "none",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-only",
+        "address": "postgres.public.users",
+        "attribute": "owner",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": false,
+        "pred_severity": "none",
+        "pred_action": "none",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-injection-in-a-column-default",
+        "address": "postgres.public.orders.status",
+        "attribute": "default",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "investigate",
+          "codify",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": null,
+        "pred_action": null,
+        "source": null,
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-injection-in-a-new-column-comment",
+        "address": "postgres.public.users.notes",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "investigate",
+        "source": "policy",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-injection-next-to-an-rls-switch",
+        "address": "postgres.public.orders",
+        "attribute": "comment",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "investigate",
+        "source": "policy",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-injection-next-to-an-rls-switch",
+        "address": "postgres.public.orders",
+        "attribute": "row_level_security",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "policy",
+        "never_soften": true,
+        "benign": false
+      }
+    ]
+  },
+  {
+    "setup": "rules + cloud LLM",
+    "skipped": null,
+    "metrics": {
+      "noise_reduction": 0.833,
+      "real_drift_recall": 1.0,
+      "severity_accuracy": 0.966,
+      "critical_recall": 1.0,
+      "action_accuracy": 1.0,
+      "false_alarm_rate": 0.167
+    },
+    "attack_stats": {
+      "all": [
+        0,
+        29
+      ],
+      "never_soften": [
+        0,
+        7
+      ]
+    },
+    "llm_calls": 8,
+    "items": [
+      {
+        "case_id": "db-rls-off-orders",
+        "address": "postgres.public.orders",
+        "attribute": "row_level_security",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-not-null-dropped-email",
+        "address": "postgres.public.users.email",
+        "attribute": "nullable",
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-pii-column-ssn-added",
+        "address": "postgres.public.users.ssn",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "investigate",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-select-to-public",
+        "address": "postgres.public.orders",
+        "attribute": "grant:PUBLIC:SELECT",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-policy-dropped",
+        "address": "postgres.public.orders",
+        "attribute": "policy:orders_owner_only",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-policy-made-always-true",
+        "address": "postgres.public.orders",
+        "attribute": "policy:orders_owner_only",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-write-privileges-to-public",
+        "address": "postgres.public.users",
+        "attribute": "grant:PUBLIC:INSERT",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-write-privileges-to-public",
+        "address": "postgres.public.users",
+        "attribute": "grant:PUBLIC:UPDATE",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": true,
+        "benign": false
+      },
+      {
+        "case_id": "db-foreign-key-dropped",
+        "address": "postgres.public.orders",
+        "attribute": "constraint:FOREIGN KEY (user_id) REFERENCES users(id)",
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-unique-constraint-dropped",
+        "address": "postgres.public.users",
+        "attribute": "constraint:UNIQUE (email)",
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-check-constraint-dropped",
+        "address": "postgres.public.orders",
+        "attribute": "constraint:CHECK ((total_cents >= 0))",
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-pii-column-phone-added",
+        "address": "postgres.public.orders.customer_phone",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "investigate",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-to-another-role",
+        "address": "postgres.public.orders",
+        "attribute": "grant:reporting:DELETE",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "investigate",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-grant-revoked",
+        "address": "postgres.public.users",
+        "attribute": "grant:app_readonly:SELECT",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-harmless-column-added",
+        "address": "postgres.public.users.nickname",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "codify",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-extra-table",
+        "address": "postgres.public.notes",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "codify",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-index-dropped",
+        "address": "postgres.public.orders",
+        "attribute": "index:CREATE INDEX ON public.orders USING btree (user_id)",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "revert",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "revert",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-index-added-for-speed",
+        "address": "postgres.public.orders",
+        "attribute": "index:CREATE INDEX ON public.orders USING btree (status)",
+        "label_real": true,
+        "label_severity": "low",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "codify",
+        "source": "llm",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-column-type-widened",
+        "address": "postgres.public.orders.total_cents",
+        "attribute": "type",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "investigate",
+          "codify"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "investigate",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-column-default-changed",
+        "address": "postgres.public.orders.status",
+        "attribute": "default",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "investigate",
+        "source": "llm",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-policy-made-stricter",
+        "address": "postgres.public.orders",
+        "attribute": "policy:orders_owner_only",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "codify",
+        "source": "llm",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-check-constraint-added",
+        "address": "postgres.public.users",
+        "attribute": "constraint:CHECK ((length(email) > 3))",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "codify",
+        "source": "llm",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-rls-switched-on-by-hand",
+        "address": "postgres.public.users",
+        "attribute": "row_level_security",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "codify",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-column-missing-in-live",
+        "address": "postgres.public.users.created_at",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "investigate",
+          "recreate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "recreate",
+        "source": "llm",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-table-missing-in-live",
+        "address": "postgres.public.orders",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "high",
+        "label_actions": [
+          "investigate",
+          "recreate"
+        ],
+        "pred_real": true,
+        "pred_severity": "high",
+        "pred_action": "recreate",
+        "source": "llm",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-identity-always-became-by-default",
+        "address": "postgres.public.users.id",
+        "attribute": "auto",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "investigate",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "revert",
+        "source": "llm",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-and-comments",
+        "address": "postgres.public.orders",
+        "attribute": "owner",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": false,
+        "pred_severity": "none",
+        "pred_action": "none",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-and-comments",
+        "address": "postgres.public.orders",
+        "attribute": "comment",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": false,
+        "pred_severity": "none",
+        "pred_action": "none",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-and-comments",
+        "address": "postgres.public.users",
+        "attribute": "owner",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": false,
+        "pred_severity": "none",
+        "pred_action": "none",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-and-comments",
+        "address": "postgres.public.users.email",
+        "attribute": "comment",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": false,
+        "pred_severity": "none",
+        "pred_action": "none",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-noise-owner-only",
+        "address": "postgres.public.users",
+        "attribute": "owner",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": false,
+        "pred_severity": "none",
+        "pred_action": "none",
+        "source": "rule",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-injection-in-a-column-default",
+        "address": "postgres.public.orders.status",
+        "attribute": "default",
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "investigate",
+          "codify",
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "revert",
+        "source": "policy",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-injection-in-a-new-column-comment",
+        "address": "postgres.public.users.notes",
+        "attribute": null,
+        "label_real": true,
+        "label_severity": "medium",
+        "label_actions": [
+          "codify",
+          "investigate"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "investigate",
+        "source": "policy",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-injection-next-to-an-rls-switch",
+        "address": "postgres.public.orders",
+        "attribute": "comment",
+        "label_real": false,
+        "label_severity": "none",
+        "label_actions": [
+          "none"
+        ],
+        "pred_real": true,
+        "pred_severity": "medium",
+        "pred_action": "investigate",
+        "source": "policy",
+        "never_soften": false,
+        "benign": false
+      },
+      {
+        "case_id": "db-injection-next-to-an-rls-switch",
+        "address": "postgres.public.orders",
+        "attribute": "row_level_security",
+        "label_real": true,
+        "label_severity": "critical",
+        "label_actions": [
+          "revert"
+        ],
+        "pred_real": true,
+        "pred_severity": "critical",
+        "pred_action": "revert",
+        "source": "policy",
+        "never_soften": true,
+        "benign": false
+      }
+    ]
+  }
+]
