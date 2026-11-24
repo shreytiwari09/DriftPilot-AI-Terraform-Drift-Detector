@@ -40,6 +40,12 @@ inputs:
   dashboard-token:
     description: Token that can write to dashboard-repo (the workflow token can't write other repos)
     default: ""
+  checks:
+    description: "Comma list of checks to run: infrastructure (Terraform drift). More arrive with database support."
+    default: infrastructure
+  event-path:
+    description: Optional CloudTrail event file (JSON). Adds "who changed it" to the findings on that resource.
+    default: ""
 
 outputs:
   drift-found:
@@ -83,5 +89,7 @@ runs:
         DRIFTPILOT_HISTORY_BRANCH: ${{ inputs.history-branch }}
         DRIFTPILOT_DASHBOARD_REPO: ${{ inputs.dashboard-repo }}
         DRIFTPILOT_DASHBOARD_TOKEN: ${{ inputs.dashboard-token }}
+        DRIFTPILOT_CHECKS: ${{ inputs.checks }}
+        DRIFTPILOT_EVENT_PATH: ${{ inputs.event-path }}
         GITHUB_TOKEN: ${{ inputs.provider-token }}
       run: driftpilot action

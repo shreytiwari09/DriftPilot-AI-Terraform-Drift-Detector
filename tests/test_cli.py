@@ -366,3 +366,31 @@ def test_action_checks_must_be_known(tmp_path: Path, monkeypatch) -> None:
 def test_action_default_check_is_infrastructure(tmp_path: Path, monkeypatch) -> None:
     result = run_action(tmp_path, monkeypatch, {"DRIFTPILOT_CHECKS": "infrastructure"})
     assert result.exit_code == 0 and "aws_s3_bucket_policy.data" in result.output
+
+
+def test_action_with_the_empty_inputs_github_passes_when_unset(tmp_path: Path, monkeypatch) -> None:
+    """action.yml passes every input as an env var, empty when the workflow sets nothing."""
+    result = run_action(
+        tmp_path, monkeypatch, {"DRIFTPILOT_CHECKS": "", "DRIFTPILOT_EVENT_PATH": ""}
+    )
+    assert result.exit_code == 0 and "aws_s3_bucket_policy.data" in result.output
+    assert "Who changed it" not in result.output
+
+
+def test_action_yml_has_the_new_inputs_and_keeps_the_old_ones() -> None:
+    import yaml
+
+    spec = yaml.safe_load((Path(__file__).parents[1] / "action.yml").read_text())
+    inputs = spec["inputs"]
+    assert inputs["checks"]["default"] == "infrastructure"
+    assert inputs["event-path"]["default"] == ""
+    v1 = {"working-directory", "llm-provider", "llm-model", "llm-api-key", "provider-token",
+          "github-token", "mode", "config-path", "history-branch", "dashboard-repo",
+          "dashboard-token"}  # fmt: skip
+    assert v1 <= set(inputs)
+    env = spec["runs"]["steps"][-1]["env"]
+    assert env["DRIFTPILOT_CHECKS"] == "${{ inputs.checks }}"
+    assert env["DRIFTPILOT_EVENT_PATH"] == "${{ inputs.event-path }}"
+    assert {"drift-found", "critical-count", "finding-count", "unmanaged-count"} <= set(
+        spec["outputs"]
+    )
