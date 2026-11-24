@@ -1,0 +1,15 @@
+# DriftPilot settings for the real-AWS demo (see README.md and RUNBOOK.md). No keys here: DriftPilot uses
+# your AWS profile (export AWS_PROFILE=driftpilot-demo), the same one Terraform uses.
+scanners:
+  aws:
+    region: ap-south-1
+    # Only look at demo resources. The IAM user names in README.md (dp-demo-*) are outside this pattern on purpose.
+    include_names: ["driftpilot-demo*"]
+    resource_types: [s3_bucket, security_group, iam_user]
+mode: advise          # issues only: nothing is merged or applied. DriftPilot never runs terraform apply.
+ownership:
+  default_team: platform
+  environment: demo
+  repo: demo/aws
+llm:
+  enabled: true       # needs GEMINI_API_KEY; use `--no-llm` to run with the rules only
