@@ -1,3 +1,3 @@
-"""DriftPilot: detect, triage and fix Terraform infrastructure drift."""
+"""DriftPilot: detect, triage and fix Terraform and database drift."""
 
-__version__ = "1.0.0"
+__version__ = "2.0.0"

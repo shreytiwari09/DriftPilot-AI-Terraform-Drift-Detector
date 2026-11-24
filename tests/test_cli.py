@@ -11,6 +11,11 @@ FIXTURES = Path(__file__).parent / "fixtures"
 runner = CliRunner(env={"COLUMNS": "200"})  # wide enough that rich doesn't wrap resource names
 
 
+def test_version_command_prints_the_release() -> None:
+    result = runner.invoke(app, ["version"])
+    assert result.exit_code == 0 and result.output.strip() == "2.0.0"
+
+
 def test_scan_reports_critical_from_recorded_plan() -> None:
     plan = FIXTURES / "github/s2_required_approvals_reduced.json"
     result = runner.invoke(app, ["scan", "--plan-json", str(plan)])

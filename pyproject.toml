@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "driftpilot"
 dynamic = ["version"]
-description = "Detect, triage and fix Terraform infrastructure drift."
+description = "Detect, triage and fix Terraform infrastructure drift and Postgres schema drift."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
