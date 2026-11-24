@@ -56,11 +56,10 @@ require_safe_environment() {
 
 # Needs a login. Prints the subscription and the location, and makes Terraform use that same subscription.
 show_identity() {
-  local line
-  line="$(az account show --query '[name, id]' --output tsv)" || die "not logged in to Azure. Run:  az login"
-  SUB_NAME="${line%%$'\t'*}"
-  SUB_ID="${line##*$'\t'}"
-  [[ -n "${SUB_ID}" && "${SUB_ID}" != "${line}" ]] || die "could not read the subscription from 'az account show'. Run:  az login"
+  # Two calls: with `--output tsv`, a list query prints one value per line, not tab-separated.
+  SUB_NAME="$(az account show --query name --output tsv)" || die "not logged in to Azure. Run:  az login"
+  SUB_ID="$(az account show --query id --output tsv)" || die "not logged in to Azure. Run:  az login"
+  [[ -n "${SUB_NAME}" && -n "${SUB_ID}" ]] || die "could not read the subscription from 'az account show'. Run:  az login"
   if [[ -n "${ARM_SUBSCRIPTION_ID:-}" && "${ARM_SUBSCRIPTION_ID}" != "${SUB_ID}" ]]; then
     die "ARM_SUBSCRIPTION_ID (${ARM_SUBSCRIPTION_ID}) is not the subscription 'az login' is using (${SUB_ID}). Unset it."
   fi

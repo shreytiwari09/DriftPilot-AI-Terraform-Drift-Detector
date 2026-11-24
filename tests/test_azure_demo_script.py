@@ -17,7 +17,10 @@ echo "az $*" >> "$STUB_LOG"
 case "$*" in
   *"account show"*)
     [[ -n "${STUB_NOT_LOGGED_IN:-}" ]] && { echo "Please run 'az login'" >&2; exit 1; }
-    printf 'Azure for Students\\t%s\\n' "${STUB_SUB_ID:-11111111-2222-3333-4444-555555555555}" ;;
+    case "$*" in
+      *"--query name"*) echo "Azure for Students" ;;
+      *) echo "${STUB_SUB_ID:-11111111-2222-3333-4444-555555555555}" ;;
+    esac ;;
   *"provider show"*) echo "${STUB_PROVIDER_STATE:-Registered}" ;;
   *"group list"*) echo -e "${STUB_GROUPS:-}" ;;
   *"resource list"*) echo -e "${STUB_RESOURCES:-}" ;;
