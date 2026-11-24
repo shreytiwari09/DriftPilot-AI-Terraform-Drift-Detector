@@ -1,0 +1,88 @@
+# UNTESTED TEMPLATE. Never applied to a real account. Rename to main.tf only in a sandbox account.
+#
+# (b) EventBridge rule on CloudTrail management events -> the SAME ECS task as template (a), with the event
+# as input. DriftPilot then knows who changed the resource (actor, API call, request) and shows it in the issue.
+#
+# Use it together with ../aws-ecs-schedule (it reuses that cluster, task definition and roles; the rule's
+# role is the only new IAM piece). Requires a CloudTrail trail that logs management events.
+#
+# KNOWN LIMIT (not verified): EventBridge input transformers fill values into a template; they cannot embed
+# the whole event as one escaped JSON string. So this template rebuilds a SMALL event with the fields
+# DriftPilot reads. If you need the full request, put a tiny Lambda between the rule and ECS that calls
+# ecs:RunTask with the full event in the DRIFTPILOT_EVENT_JSON override instead.
+
+variable "cluster_arn" { type = string }         # from template (a)
+variable "task_definition_arn" { type = string } # from template (a)
+variable "subnet_ids" { type = list(string) }
+variable "security_group_ids" { type = list(string) }
+variable "task_role_arn" { type = string }
+variable "execution_role_arn" { type = string }
+
+# Which changes should wake DriftPilot. Start narrow: a busy account produces many events.
+resource "aws_cloudwatch_event_rule" "risky_changes" {
+  name        = "driftpilot-risky-changes"
+  description = "Security-relevant API calls, delivered through CloudTrail"
+  event_pattern = jsonencode({
+    "detail-type" = ["AWS API Call via CloudTrail"]
+    source        = ["aws.s3", "aws.ec2", "aws.iam", "aws.rds", "aws.cloudtrail"]
+    detail = {
+      eventName = [
+        "PutBucketPolicy", "DeleteBucketPolicy", "PutPublicAccessBlock", "DeletePublicAccessBlock",
+        "AuthorizeSecurityGroupIngress", "RevokeSecurityGroupIngress",
+        "PutUserPolicy", "PutRolePolicy", "CreatePolicyVersion", "AttachUserPolicy", "AttachRolePolicy",
+        "ModifyDBInstance", "StopLogging", "DeleteTrail",
+      ]
+    }
+  })
+}
+
+resource "aws_iam_role" "events" {
+  name = "driftpilot-events"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{ Effect = "Allow", Principal = { Service = "events.amazonaws.com" }, Action = "sts:AssumeRole" }]
+  })
+}
+resource "aws_iam_role_policy" "run_task" {
+  role = aws_iam_role.events.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      { Effect = "Allow", Action = "ecs:RunTask", Resource = var.task_definition_arn },
+      { Effect = "Allow", Action = "iam:PassRole", Resource = [var.task_role_arn, var.execution_role_arn] },
+    ]
+  })
+}
+
+resource "aws_cloudwatch_event_target" "run_driftpilot" {
+  rule     = aws_cloudwatch_event_rule.risky_changes.name
+  arn      = var.cluster_arn
+  role_arn = aws_iam_role.events.arn
+
+  ecs_target {
+    task_definition_arn = var.task_definition_arn
+    launch_type         = "FARGATE"
+    network_configuration {
+      subnets          = var.subnet_ids
+      security_groups  = var.security_group_ids
+      assign_public_ip = true
+    }
+  }
+
+  # Hand DriftPilot a small CloudTrail-shaped event through DRIFTPILOT_EVENT_JSON.
+  input_transformer {
+    input_paths = {
+      eventName   = "$.detail.eventName"
+      eventSource = "$.detail.eventSource"
+      eventTime   = "$.detail.eventTime"
+      idType      = "$.detail.userIdentity.type"
+      actorArn    = "$.detail.userIdentity.arn"
+      bucketName  = "$.detail.requestParameters.bucketName"
+      groupId     = "$.detail.requestParameters.groupId"
+      dbName      = "$.detail.requestParameters.dBInstanceIdentifier"
+    }
+    input_template = <<-EOT
+      {"containerOverrides":[{"name":"driftpilot","environment":[{"name":"DRIFTPILOT_EVENT_JSON","value":"{\"eventName\":\"<eventName>\",\"eventSource\":\"<eventSource>\",\"eventTime\":\"<eventTime>\",\"userIdentity\":{\"type\":\"<idType>\",\"arn\":\"<actorArn>\"},\"requestParameters\":{\"bucketName\":\"<bucketName>\",\"groupId\":\"<groupId>\",\"dBInstanceIdentifier\":\"<dbName>\"}}"}]}]}
+    EOT
+  }
+}

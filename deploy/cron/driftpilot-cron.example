@@ -1,0 +1,17 @@
+# UNTESTED TEMPLATE. Read it, then try it on a machine you can afford to break.
+#
+# (d) Plain cron on any VM with Docker. Edit with `crontab -e`.
+#
+# /etc/driftpilot.env holds the secrets, one KEY=value per line, owned by root, `chmod 600`:
+#   DRIFTPILOT_GITHUB_TOKEN=...
+#   DRIFTPILOT_LLM_API_KEY=...
+#   GITHUB_REPOSITORY=owner/repo
+#   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY: only a READ-ONLY identity (see deploy/README.md);
+#   prefer an instance role over keys when the VM is on AWS.
+#
+# The Terraform code is a checkout in /srv/infra that you keep up to date (for example `git pull` first).
+# Every 6 hours at minute 17 (not on the hour, when many schedules fire at once):
+17 */6 * * * cd /srv/infra && git pull -q && docker run --rm --user "$(id -u):$(id -g)" --env-file /etc/driftpilot.env -e DRIFTPILOT_WORKING_DIRECTORY=/workspace -v /srv/infra:/workspace driftpilot:2.0.0 action >> /var/log/driftpilot.log 2>&1
+
+# Without Docker: the same command from a virtualenv (Terraform must be installed too):
+#   pip install 'driftpilot[aws]' && DRIFTPILOT_WORKING_DIRECTORY=/srv/infra driftpilot action

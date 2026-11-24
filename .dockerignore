@@ -1,0 +1,17 @@
+.git
+.venv
+.github
+docs
+eval/cache
+eval/results
+tests
+demo
+scripts
+assets
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.env
+*.tfstate*
+.terraform
+driftpilot-outputs.json

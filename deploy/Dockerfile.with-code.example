@@ -1,0 +1,11 @@
+# UNTESTED TEMPLATE. The runner image has the tool but not your Terraform code. A container started by a
+# schedule has no checkout, so the simplest way is a small image of your own that adds the code:
+#
+#   docker build -f deploy/Dockerfile.with-code.example -t my-infra-driftpilot:1 --build-arg CODE_DIR=infra .
+#
+# Rebuild it (for example in CI) when the Terraform code changes, so a run always checks the latest merged code.
+# Credentials are NOT baked in: they arrive as environment variables or the task/instance role at run time.
+FROM driftpilot:dev
+ARG CODE_DIR=infra
+COPY --chown=driftpilot:driftpilot ${CODE_DIR} /workspace
+ENV DRIFTPILOT_WORKING_DIRECTORY=/workspace

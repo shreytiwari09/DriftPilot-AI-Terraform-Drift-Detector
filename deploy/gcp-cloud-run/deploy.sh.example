@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# UNTESTED TEMPLATE. Never run against a real Google Cloud project. Read it, then try it in a sandbox project.
+#
+# (c) A Cloud Run *job* (runs to completion, no web server) started by Cloud Scheduler every 6 hours.
+# Terraform can manage any cloud, so this works for Google Cloud resources too; DriftPilot's AWS scanner
+# only runs if you configure `scanners.aws` and give the job AWS credentials (use workload identity
+# federation, not a key file).
+set -euo pipefail
+
+PROJECT="CHANGE_ME"
+REGION="europe-west1"
+IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/driftpilot/driftpilot:2.0.0"   # push the image here first
+JOB="driftpilot"
+SA="driftpilot-runner@${PROJECT}.iam.gserviceaccount.com"                  # a service account with READ-ONLY roles
+
+# 1) Secrets live in Secret Manager, never in this file.
+#    printf '%s' "$GITHUB_TOKEN" | gcloud secrets create driftpilot-github-token --data-file=- --project "$PROJECT"
+#    printf '%s' "$LLM_KEY"      | gcloud secrets create driftpilot-llm-key      --data-file=- --project "$PROJECT"
+#    Give $SA the role roles/secretmanager.secretAccessor on those two secrets only.
+
+# 2) The job: same image, same command as everywhere else.
+gcloud run jobs create "$JOB" \
+  --project "$PROJECT" --region "$REGION" \
+  --image "$IMAGE" \
+  --service-account "$SA" \
+  --args "action" \
+  --set-env-vars "DRIFTPILOT_WORKING_DIRECTORY=/workspace,DRIFTPILOT_MODE=advise,GITHUB_REPOSITORY=CHANGE_ME/owner-repo" \
+  --set-secrets "DRIFTPILOT_GITHUB_TOKEN=driftpilot-github-token:latest,DRIFTPILOT_LLM_API_KEY=driftpilot-llm-key:latest" \
+  --task-timeout 30m --max-retries 0
+
+# 3) The timetable: Cloud Scheduler calls the Cloud Run Admin API to start the job.
+gcloud scheduler jobs create http driftpilot-every-6h \
+  --project "$PROJECT" --location "$REGION" \
+  --schedule "17 */6 * * *" \
+  --uri "https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${JOB}:run" \
+  --http-method POST \
+  --oauth-service-account-email "$SA"      # needs roles/run.invoker on the job
