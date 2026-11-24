@@ -190,8 +190,9 @@ class AuditingLLM:
     def complete_json(self, system: str, prompt: str, schema: dict[str, Any]) -> str:
         return self.call(system, prompt, schema)
 
-    def collect(self, run_id: str) -> list[AuditRecord]:
-        return [r.model_copy(update={"run_id": run_id}) for r in self.records]
+    def collect(self, run_id: str, since: int = 0) -> list[AuditRecord]:
+        """The records from index `since` on, stamped with `run_id`."""
+        return [r.model_copy(update={"run_id": run_id}) for r in self.records[since:]]
 
 
 def guarded(client: LLMClient | None, limits: LimitsConfig) -> AuditingLLM | None:

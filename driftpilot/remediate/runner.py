@@ -1,6 +1,7 @@
 """Turn a scan's verdicts into fixes: plan per resource → patch → PR, or an issue (SPEC §4.5)."""
 
 import difflib
+from collections.abc import Callable
 from pathlib import Path
 
 from rich.console import Console
@@ -8,17 +9,26 @@ from rich.console import Console
 from driftpilot.config import Config
 from driftpilot.models import GuardrailEvent, RemediationResult, ScanResult
 from driftpilot.remediate.codify import Patch, codify, ignore_changes
-from driftpilot.remediate.github_out import Item, Output, issue_body, pr_body
+from driftpilot.remediate.github_out import Item, Output, is_database, issue_body, pr_body
 from driftpilot.remediate.importer import import_resource
 from driftpilot.scanners import import_target
 from driftpilot.triage.llm import LLMClient
 from driftpilot.triage.policy import RemediationPlan, plan_remediations
 
+DatabasePatcher = Callable[[Item], Patch | None]
+
 
 def make_patch(
-    plan: RemediationPlan, item: Item, llm: LLMClient | None, working_dir: Path, config: Config
+    plan: RemediationPlan,
+    item: Item,
+    llm: LLMClient | None,
+    working_dir: Path,
+    config: Config,
+    db_patch: DatabasePatcher | None = None,
 ) -> Patch | None:
     """A verified-or-not patch for PR actions; None when no patch can be attempted."""
+    if is_database(item):  # a Postgres schema: the patch is a migration file, not Terraform
+        return db_patch(item) if db_patch else None
     if plan.action == "codify":
         if llm is None:
             return None
@@ -77,8 +87,12 @@ def run_remediations(
     working_dir: Path,
     output: Output,
     repo_working_dir: str = ".",
+    db_patch: DatabasePatcher | None = None,
 ) -> list[RemediationResult]:
-    """Open/update one issue or PR per plan. A failing plan is recorded, not fatal."""
+    """Open/update one issue or PR per plan. A failing plan is recorded, not fatal.
+
+    `db_patch` writes the patch for a database item (a verified migration file).
+    """
     outcomes = []
     prs_tried = 0
     for plan in plan_remediations(result.findings, result.unmanaged, result.verdicts, config):
@@ -98,7 +112,9 @@ def run_remediations(
             prs_tried += 1
         try:
             patch = (
-                make_patch(plan, item, llm, working_dir, config) if plan.delivery == "pr" else None
+                make_patch(plan, item, llm, working_dir, config, db_patch)
+                if plan.delivery == "pr"
+                else None
             )
             if patch is not None:
                 enforce_patch_limits(patch, working_dir, config, result.guardrail_events, plan.key)
@@ -146,6 +162,7 @@ class ConsoleOutput:
             self.console.rule(path)
             self.console.print(content, markup=False)
             if self.write_to is not None:
+                (self.write_to / path).parent.mkdir(parents=True, exist_ok=True)
                 (self.write_to / path).write_text(content)
                 self.console.print(f"[green]wrote {self.write_to / path}[/]")
         return "(dry run: pull request)" if self.write_to is None else "(written locally)"

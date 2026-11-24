@@ -1,0 +1,14 @@
+# DriftPilot settings for the local Postgres demo (see README.md).
+# The database URLs are secrets: they are read from the environment, never written here.
+#   export DRIFTPILOT_DB_URL=postgresql://driftpilot_ro:driftpilot_ro@localhost:5433/appdb
+#   export DRIFTPILOT_SCRATCH_DB_URL=postgresql://driftpilot_scratch:driftpilot_scratch@localhost:5433/postgres
+database:
+  migrations: migrations
+  schemas: [public]
+mode: open-prs        # `db fix` shows pull requests for changes worth keeping (never merged)
+ownership:
+  default_team: data-platform
+  environment: local
+  repo: demo/postgres
+llm:
+  enabled: true       # needs GEMINI_API_KEY; use `--no-llm` to run with the rules only

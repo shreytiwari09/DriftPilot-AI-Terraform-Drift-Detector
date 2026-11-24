@@ -1,4 +1,4 @@
-"""Inject and revert the 14 drift scenarios from SPEC §7 (demo and eval helper, not DriftPilot).
+"""Inject and revert the drift scenarios from SPEC §7 and the database demo (demo helper).
 
     python scripts/inject_drift.py list
     python scripts/inject_drift.py inject 2 3 5
@@ -7,6 +7,10 @@
 GitHub scenarios need GITHUB_TOKEN (the demo org's fine-grained PAT). Revert values match the
 Terraform code in demo/github and demo/docker; keep them in sync if that code changes.
 Scenarios 1 and 10 delete a resource, so reverting them means `terraform apply` (needs --tf-dir).
+
+Scenarios 15-19 change the local Postgres demo in demo/postgres (docker compose up -d first), as
+its owner role `app`. They only ever connect to localhost (set DRIFTPILOT_DEMO_ADMIN_URL for
+another port).
 """
 
 import argparse
@@ -18,6 +22,7 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 ORG = "driftpilot-demo"
 API_REPO, WEB_REPO, HANDMADE_REPO = "demo-api", "demo-web", "demo-handmade"
@@ -33,6 +38,7 @@ WEB_CONTAINER, CACHE_CONTAINER, HANDMADE_CONTAINER = (
     "driftpilot-handmade",
 )
 MANAGED_LABELS = {"managed-by": "terraform", "app": "driftpilot-demo"}
+DEMO_DB_URL = "postgresql://app:app@localhost:5433/appdb"  # demo/postgres, local only
 
 
 @dataclass
@@ -176,6 +182,41 @@ def s13_revert(_: argparse.Namespace) -> None:
     container(HANDMADE_CONTAINER).remove(force=True)
 
 
+# ---------- Postgres scenarios (demo/postgres, local Docker only) ----------
+
+
+def pg_run(*statements: str) -> None:
+    """Run SQL as the demo's owner role. Refuses any database that is not on this machine."""
+    url = os.environ.get("DRIFTPILOT_DEMO_ADMIN_URL", DEMO_DB_URL)
+    if urlparse(url).hostname not in ("localhost", "127.0.0.1", "::1"):
+        sys.exit("refusing to run: the demo database must be on localhost")
+    import psycopg
+
+    with psycopg.connect(url, autocommit=True) as conn:
+        for statement in statements:
+            conn.execute(statement)
+
+
+def pg(inject: str, revert: str) -> tuple[Callable, Callable]:
+    return lambda _: pg_run(inject), lambda _: pg_run(revert)
+
+
+PG_SCENARIOS = {
+    15: ("RLS switched off on orders", "critical / revert",
+         "ALTER TABLE orders DISABLE ROW LEVEL SECURITY",
+         "ALTER TABLE orders ENABLE ROW LEVEL SECURITY"),
+    16: ("NOT NULL dropped on users.email", "high / revert",
+         "ALTER TABLE users ALTER COLUMN email DROP NOT NULL",
+         "ALTER TABLE users ALTER COLUMN email SET NOT NULL"),
+    17: ("Column ssn added to users", "high / investigate",
+         "ALTER TABLE users ADD COLUMN ssn text", "ALTER TABLE users DROP COLUMN IF EXISTS ssn"),
+    18: ("GRANT SELECT ON orders TO PUBLIC", "critical / revert",
+         "GRANT SELECT ON orders TO PUBLIC", "REVOKE SELECT ON orders FROM PUBLIC"),
+    19: ("Harmless column nickname added to users", "medium / codify",
+         "ALTER TABLE users ADD COLUMN nickname text",
+         "ALTER TABLE users DROP COLUMN IF EXISTS nickname"),
+}  # fmt: skip
+
 SCENARIOS = {
     s.number: s
     for s in [
@@ -210,6 +251,10 @@ SCENARIOS = {
         Scenario(13, "docker", "Labelled container started by hand", "unmanaged / import",
                  s13_inject, s13_revert),
         Scenario(14, "both", "No change (control)", "nothing reported", noop, noop),
+        *(
+            Scenario(n, "postgres", desc, expected, *pg(inject, revert))
+            for n, (desc, expected, inject, revert) in PG_SCENARIOS.items()
+        ),
     ]
 }  # fmt: skip
 
@@ -219,7 +264,7 @@ def main(argv: list[str] | None = None) -> None:
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("command", choices=["list", "inject", "revert"])
-    parser.add_argument("scenarios", nargs="*", type=int, help="scenario numbers (1-14)")
+    parser.add_argument("scenarios", nargs="*", type=int, help="scenario numbers (1-19)")
     parser.add_argument("--tf-dir", type=Path, help="Terraform dir for reverts that need apply")
     args = parser.parse_args(argv)
 
@@ -229,7 +274,7 @@ def main(argv: list[str] | None = None) -> None:
         return
     unknown = [n for n in args.scenarios if n not in SCENARIOS]
     if not args.scenarios or unknown:
-        parser.error(f"give scenario numbers 1-14 (unknown: {unknown})")
+        parser.error(f"give scenario numbers 1-19 (unknown: {unknown})")
     for number in args.scenarios:
         scenario = SCENARIOS[number]
         print(f"{args.command} {number}: {scenario.description}")

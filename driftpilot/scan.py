@@ -16,6 +16,8 @@ from driftpilot.collector import (
     terraform_init,
 )
 from driftpilot.config import Config
+from driftpilot.database.diff import diff_catalogs, table_address
+from driftpilot.database.scan import Catalogs, load_catalogs
 from driftpilot.models import GuardrailEvent, ScanResult, UnmanagedFinding
 from driftpilot.ownership import apply_ownership
 from driftpilot.scanners import build_scanners
@@ -53,11 +55,14 @@ def _scan_unmanaged(
     return unmanaged
 
 
-def attach_audit(result: ScanResult, llm: LLMClient | None) -> None:
-    """Copy the LLM audit trail and budget state onto the result (safe to call again later)."""
+def attach_audit(result: ScanResult, llm: LLMClient | None, since: int = 0) -> None:
+    """Copy the LLM audit trail and budget state onto the result (safe to call again later).
+
+    `since`: skip the first calls, which belong to an earlier scan in the same process.
+    """
     if not isinstance(llm, AuditingLLM):
         return
-    result.audit = llm.collect(result.run_id)
+    result.audit = llm.collect(result.run_id, since)
     result.llm_call_limit = llm.call_limit
     result.guardrail_events = [e for e in result.guardrail_events if e.kind != "budget-exceeded"]
     if llm.budget_exceeded:
@@ -120,4 +125,49 @@ def run_scan(
     )
     apply_ownership(result, config, working_dir, resources, managed_resources(plan))
     attach_audit(result, llm)
+    return result
+
+
+def run_database_scan(
+    working_dir: Path,
+    config: Config,
+    llm: LLMClient | None = None,
+    expected_json: Path | None = None,
+    live_json: Path | None = None,
+    catalogs: Catalogs | None = None,
+    audit_since: int = 0,
+) -> ScanResult:
+    """Compare the schema the migrations build with the live Postgres schema.
+
+    Same pipeline as `run_scan`: rules, LLM triage, guardrails, policy, ownership. `expected_json` /
+    `live_json` replay saved catalogs instead of using the databases; `catalogs` reuses ones read
+    already.
+    """
+    now = datetime.now(UTC)
+    result = ScanResult(
+        run_id=f"{now:%Y%m%dT%H%M%SZ}-{uuid.uuid4().hex[:6]}",
+        started_at=now,
+        working_dir=str(working_dir),
+    )
+    catalogs = catalogs or load_catalogs(working_dir, config, expected_json, live_json)
+    ignore = config.database.ignore
+    expected, live = catalogs.expected.filtered(ignore), catalogs.live.filtered(ignore)
+    result.findings = diff_catalogs(expected, live, result.run_id, now)
+    result.managed_resource_count = len(expected.tables)
+    result.verdicts = apply_rules(result.findings, load_rules(), {})
+    if llm is not None:
+        result.verdicts |= triage_findings(
+            llm,
+            result.findings,
+            result.verdicts,
+            None,
+            guardrails=config.guardrails.enabled,
+            events=result.guardrail_events,
+        )
+    result.verdicts = apply_policy(
+        result.findings, [], result.verdicts, config, {}, result.guardrail_events
+    )
+    managed = [{"address": table_address(t), "values": None} for t in expected.tables]
+    apply_ownership(result, config, working_dir, {}, managed, drift_type="database")
+    attach_audit(result, llm, audit_since)
     return result

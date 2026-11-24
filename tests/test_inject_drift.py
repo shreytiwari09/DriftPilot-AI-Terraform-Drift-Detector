@@ -2,14 +2,16 @@ import importlib.util
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 SCRIPT = Path(__file__).parents[1] / "scripts" / "inject_drift.py"
 spec = importlib.util.spec_from_file_location("inject_drift", SCRIPT)
 inject_drift = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(inject_drift)
 
 
-def test_all_14_scenarios_defined() -> None:
-    assert sorted(inject_drift.SCENARIOS) == list(range(1, 15))
+def test_all_19_scenarios_defined() -> None:
+    assert sorted(inject_drift.SCENARIOS) == list(range(1, 20))
 
 
 def test_list_needs_no_credentials(capsys) -> None:
@@ -47,3 +49,21 @@ def test_revert_needing_terraform_without_tf_dir_only_prints(capsys) -> None:
         inject_drift.main(["revert", "10"])
     run.assert_not_called()
     assert "terraform apply" in capsys.readouterr().out
+
+
+def test_postgres_scenarios_run_sql_on_localhost_only(monkeypatch) -> None:
+    ran: list[str] = []
+    monkeypatch.setattr(inject_drift, "pg_run", lambda *sql: ran.extend(sql))
+    inject_drift.main(["inject", "15", "16", "17", "18"])
+    inject_drift.main(["revert", "18", "17", "16", "15"])
+    assert ran[0] == "ALTER TABLE orders DISABLE ROW LEVEL SECURITY"
+    assert (
+        "GRANT SELECT ON orders TO PUBLIC" in ran and "REVOKE SELECT ON orders FROM PUBLIC" in ran
+    )
+    assert ran[-1] == "ALTER TABLE orders ENABLE ROW LEVEL SECURITY"
+
+
+def test_postgres_scenarios_refuse_a_remote_database(monkeypatch) -> None:
+    monkeypatch.setenv("DRIFTPILOT_DEMO_ADMIN_URL", "postgresql://app:pw@db.example.com/appdb")
+    with pytest.raises(SystemExit, match="localhost"):
+        inject_drift.pg_run("SELECT 1")

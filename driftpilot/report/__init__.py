@@ -41,7 +41,11 @@ def short(value: Any, limit: int = 60) -> str:
 
 def change_text(f: DriftFinding) -> str:
     if f.change_kind == "deleted":
+        if f.provider == "postgres":
+            return "missing from the live database"
         return "deleted outside Terraform"
+    if f.change_kind == "added":
+        return f"only in the live database: {short(f.after)}"
     return f"{short(f.before)} → {short(f.after)}"
 
 

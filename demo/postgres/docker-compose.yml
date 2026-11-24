@@ -1,0 +1,26 @@
+# Local demo database for DriftPilot's database check. Local only: the passwords below are demo values.
+#
+#   docker compose up -d        # starts Postgres 16 on localhost:5433 and applies migrations/
+#   docker compose down -v      # stops it and deletes its data
+#
+# The same server plays two parts: the "live" database `appdb`, and the place where DriftPilot makes
+# its throw-away `driftpilot_scratch_*` databases to see what the migrations build.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: driftpilot-demo-postgres
+    environment:
+      POSTGRES_USER: app          # the team's own role: owns the tables, can "hotfix" by hand
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: appdb
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - ./init/00_roles.sql:/docker-entrypoint-initdb.d/00_roles.sql:ro
+      - ./init/10_apply_migrations.sh:/docker-entrypoint-initdb.d/10_apply_migrations.sh:ro
+      - ./migrations:/migrations:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U app -d appdb"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

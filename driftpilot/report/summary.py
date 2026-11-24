@@ -68,10 +68,10 @@ def _guardrails_section(result: ScanResult) -> list[str]:
     return lines
 
 
-def build_summary(result: ScanResult) -> str:
+def build_summary(result: ScanResult, heading: str = "## DriftPilot drift report") -> str:
     c = counts(result)
     lines = [
-        "## DriftPilot drift report",
+        heading,
         "",
         f"Run `{result.run_id}` · directory `{result.working_dir}` · "
         f"{result.started_at:%Y-%m-%d %H:%M UTC}",
@@ -141,3 +141,18 @@ def build_summary(result: ScanResult) -> str:
     if result.errors:
         lines += ["", "### Errors", ""] + [f"- {_cell(e)}" for e in result.errors]
     return "\n".join(lines) + "\n"
+
+
+def build_combined_summary(sections: list[tuple[str, ScanResult]]) -> str:
+    """One report with a section per check, e.g. infrastructure and database.
+
+    A single section keeps the usual heading; several share one title.
+    """
+    if len(sections) == 1:
+        result = sections[0][1]
+        if result.context.drift_type == "database":
+            return build_summary(result, "## DriftPilot database drift report")
+        return build_summary(result)
+    parts = ["# DriftPilot drift report\n"]
+    parts += [build_summary(result, f"## {title}") for title, result in sections]
+    return "\n".join(parts)

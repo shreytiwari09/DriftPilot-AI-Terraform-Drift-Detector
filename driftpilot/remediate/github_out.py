@@ -10,6 +10,8 @@ import shlex
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from driftpilot.database import PROVIDER as POSTGRES
+from driftpilot.database.sql import undo_script
 from driftpilot.guardrails import sanitize_text
 from driftpilot.models import DriftFinding, UnmanagedFinding, Verdict
 from driftpilot.remediate.codify import Patch
@@ -35,6 +37,19 @@ ACTION_TEXT = {
 }
 
 
+DATABASE_ACTION_TEXT = {
+    "revert": "Undo the hand change so the database matches the migrations again.",
+    "recreate": "The object is missing from the live database; put it back.",
+    "investigate": "A person should decide whether to keep this change or undo it.",
+    "codify": "Keep the change and add a migration for it, so a rebuild keeps it too.",
+}
+
+
+def action_text(item: "Item") -> str:
+    texts = DATABASE_ACTION_TEXT if is_database(item) else ACTION_TEXT
+    return texts.get(item.plan.action) or ACTION_TEXT[item.plan.action]
+
+
 def marker(key: str) -> str:
     return f"<!-- driftpilot:key={key} -->"
 
@@ -56,6 +71,11 @@ class Output(Protocol):
     def pull_request(self, item: Item, patch: Patch) -> str: ...
 
 
+def is_database(item: "Item") -> bool:
+    """True when the item is about a Postgres schema, not Terraform resources."""
+    return any(f.provider == POSTGRES for f in item.findings)
+
+
 def _cell(value: Any) -> str:
     """One table cell: hidden characters and comments out, markdown-breaking characters escaped."""
     text = value if isinstance(value, str) else json.dumps(value, default=str)
@@ -64,13 +84,20 @@ def _cell(value: Any) -> str:
     return text.replace("|", "\\|").replace("`", "'")
 
 
+def _change_cell(f: DriftFinding) -> str:
+    if f.change_kind == "deleted":
+        return "missing from the live database" if f.provider == POSTGRES else "deleted"
+    if f.change_kind == "added":
+        return f"only in the live database: `{_cell(f.after)}`"
+    return f"`{_cell(f.before)}` → `{_cell(f.after)}`"
+
+
 def _changes_table(item: Item) -> str:
-    rows = ["| Setting | Recorded → Real | Why | Source |", "| --- | --- | --- | --- |"]
+    recorded = "Migrations → Live" if is_database(item) else "Recorded → Real"
+    rows = [f"| Setting | {recorded} | Why | Source |", "| --- | --- | --- | --- |"]
     for f in item.findings:
         v = item.verdicts.get(f.id)
-        change = (
-            "deleted" if f.change_kind == "deleted" else f"`{_cell(f.before)}` → `{_cell(f.after)}`"
-        )
+        change = _change_cell(f)
         source = f"{v.source} · {v.intent} · {v.confidence:.0%}" if v else "—"
         reason = _cell(v.reason) if v else ""
         rows.append(f"| `{f.attribute_path or '—'}` | {change} | {reason} | {source} |")
@@ -96,18 +123,40 @@ FIX_NOTE = (
 )
 
 
-def _patch_section(patch: Patch) -> str:
+def _patch_section(patch: Patch, language: str = "hcl") -> str:
     files = "\n\n".join(
-        f"`{path}`\n```hcl\n{content.strip()}\n```" for path, content in patch.files.items()
+        f"`{path}`\n```{language}\n{content.strip()}\n```" for path, content in patch.files.items()
     )
     status = "✅ verified" if patch.verified else "⚠️ **not verified** — do not apply without review"
     if patch.note.startswith("guardrail:"):
         return f"### Proposed change ({status})\n\n{patch.note}"
+    if language == "sql":
+        problem = "" if patch.verified or not patch.note else f"\n\n{patch.note}"
+        proof = f"\n\n**Proof:** {patch.proof.strip()}" if patch.proof.strip() else ""
+        return f"### Proposed migration ({status}){problem}\n\n{files}{proof}"
     return (
         f"### Proposed change ({status}, {patch.attempts} attempt(s))\n\n{files}\n\n"
         "<details><summary>Terraform output</summary>\n\n"
         f"```\n{patch.proof.strip()}\n```\n</details>"
     )
+
+
+def _sql_section(item: Item) -> list[str]:
+    """Suggested SQL that undoes the drift on the live database (for a person to review and run)."""
+    script, manual = undo_script(item.findings)
+    lines = ["", "### Suggested SQL (review before running)", ""]
+    if item.plan.action == "investigate":
+        lines += ["If you decide to undo the change, this would do it:", ""]
+    if script:
+        lines += ["```sql", script, "```"]
+    if manual:
+        lines += ["", "No automatic SQL for: " + ", ".join(f"`{_cell(m)}`" for m in manual) + "."]
+    lines += [
+        "",
+        "DriftPilot never changes the database. Run this yourself, in a transaction, after a look "
+        "at the data it touches.",
+    ]
+    return lines
 
 
 def _guardrail_notes(item: Item) -> list[str]:
@@ -165,8 +214,7 @@ def issue_body(item: Item, patch: Patch | None, run_url: str | None) -> str:
     p = item.plan
     lines = [
         marker(p.key),
-        f"**Severity:** {p.severity} · **Recommended action:** `{p.action}` — "
-        f"{ACTION_TEXT[p.action]}",
+        f"**Severity:** {p.severity} · **Recommended action:** `{p.action}` — {action_text(item)}",
         *_facts(item),
         "",
         f"### What changed on `{p.address}`",
@@ -174,7 +222,10 @@ def issue_body(item: Item, patch: Patch | None, run_url: str | None) -> str:
         _changes_table(item),
         *_guardrail_notes(item),
     ]
-    if p.action in ("revert", "recreate"):
+    if is_database(item):
+        if p.action in ("revert", "recreate", "investigate"):
+            lines += _sql_section(item)
+    elif p.action in ("revert", "recreate"):
         lines += [
             "",
             "### How to fix",
@@ -187,18 +238,54 @@ def issue_body(item: Item, patch: Patch | None, run_url: str | None) -> str:
             "```",
         ]
     if patch is not None:
-        lines += ["", _patch_section(patch)]
+        lines += ["", _patch_section(patch, "sql" if is_database(item) else "hcl")]
     lines += ["", f"_Opened by DriftPilot{f' ([run]({run_url}))' if run_url else ''}._"]
     return "\n".join(lines)
 
 
+def _database_pr_body(item: Item, patch: Patch, run_url: str | None) -> str:
+    p = item.plan
+    files = ", ".join(f"`{path}`" for path in patch.files)
+    return "\n".join(
+        [
+            marker(p.key),
+            f"**Action:** `{p.action}` — {action_text(item)} · **Severity:** {p.severity}",
+            *_facts(item),
+            "",
+            f"### What changed on `{p.address}`",
+            "",
+            _changes_table(item),
+            *_guardrail_notes(item),
+            "",
+            "### Proof",
+            "",
+            f"{patch.proof.strip()}. DriftPilot built a fresh scratch database from every "
+            f"migration plus {files} and compared it with the live database.",
+            "",
+            "### New migration",
+            "",
+            "\n\n".join(
+                f"`{path}`\n```sql\n{content.strip()}\n```" for path, content in patch.files.items()
+            ),
+            "",
+            "After merging, mark the new migration as applied on the live database (it already has "
+            "this change); do not run it there. Other databases, such as a rebuild or a new "
+            "environment, will get the change from this file.",
+            "",
+            f"_Opened by DriftPilot{f' ([run]({run_url}))' if run_url else ''}._",
+        ]
+    )
+
+
 def pr_body(item: Item, patch: Patch, run_url: str | None) -> str:
+    if is_database(item):
+        return _database_pr_body(item, patch, run_url)
     p = item.plan
     proof = patch.proof.strip()
     return "\n".join(
         [
             marker(p.key),
-            f"**Action:** `{p.action}` — {ACTION_TEXT[p.action]} · **Severity:** {p.severity}",
+            f"**Action:** `{p.action}` — {action_text(item)} · **Severity:** {p.severity}",
             *_facts(item),
             "",
             f"### What changed on `{p.address}`",
