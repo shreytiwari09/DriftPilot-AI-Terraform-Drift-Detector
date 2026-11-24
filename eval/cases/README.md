@@ -18,6 +18,7 @@ match model output. Changing a label or adding a case means re-running every con
 | `noise.yaml` | Changes that are not real drift |
 | `unmanaged.yaml` | Resources created outside Terraform |
 | `adversarial.yaml` | Real drift whose text tries to steer the AI (prompt injection); scored separately, see "Adversarial" below |
+| `database.yaml` | Postgres schema drift (the schema the migrations build against the live one); scored separately, see "Database" below |
 
 ## Case format
 
@@ -89,3 +90,38 @@ is a decoy, **E** benign look-alikes.
 - `adversarial.yaml` is not part of the main tables; `python eval/run_eval.py` reports it in its own section, with two
   setups: `rules + cloud LLM (no guardrails)` (the v1 behaviour: raw values, old prompt, no never-soften, no
   suspicious-input rule) and `rules + cloud LLM + guardrails`.
+
+## Database
+
+`database.yaml` holds Postgres schema drift. A case has no Terraform plan: it names a catalog (`catalogs/shop.json`, the
+demo's `users` + `orders` schema as DriftPilot reads it from a database) and the hand changes someone made to it. DriftPilot's
+own diff turns the two catalogs into findings, so the labels cover exactly what a real scan would produce.
+
+```yaml
+- id: db-rls-off-orders
+  source: synthetic
+  scenario: 15                       # scripts/inject_drift.py scenario, if any
+  database:
+    expected: shop                   # a file in catalogs/, or a catalog written in place (default: shop)
+    live: ...                        # optional; by default `expected` with the `edit` steps applied
+    edit:
+      - {op: set_table, table: orders, field: rls_enabled, value: false}
+  expect:
+    - {address: postgres.public.orders, attribute: row_level_security, real: true, severity: critical, action: [revert]}
+```
+
+- Edit steps (`op`): `set_table` (rls_enabled, rls_forced, owner, comment), `add_table`, `drop_table`, `set_column`
+  (nullable, type, default, comment, identity), `add_column`, `drop_column`, `add_grant`, `drop_grant`, `add_policy`,
+  `set_policy` (using, with_check, roles, command, permissive), `drop_policy`, `add_index`, `drop_index`,
+  `add_constraint`, `drop_constraint`.
+- Addresses are `postgres.<schema>.<table>` (table, grants, policies, constraints, indexes, row-level security) or
+  `postgres.<schema>.<table>.<column>` (columns). `attribute` is `null` for an object that exists on one side only;
+  `grant:<role>:<privilege>`, `policy:<name>`, `constraint:<definition>`, `index:<definition>` for those objects.
+- Rubric: security controls removed (row-level security off, a policy dropped or loosened, a grant to PUBLIC) are
+  `critical`; a constraint or NOT NULL dropped, a column that looks like personal data, a column or table lost from the
+  live database are `high`; an extra table or column, a dropped index, a type or default change are `medium`; an extra
+  index is `low`; owner-only and comment-only changes are noise. Stricter-than-migrations changes (a check added,
+  RLS switched on) are `medium` / `codify`.
+- Some cases carry text that tries to steer the AI (a column default, a column comment, a table comment).
+- Run on its own: `python eval/run_eval.py --database-only --max-calls 40` (setups: `raw schema diff`, `rules only`,
+  `rules + cloud LLM`). The main tables do not include these cases.

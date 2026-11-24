@@ -1,0 +1,192 @@
+{
+  "tables": [
+    {
+      "schema_name": "public",
+      "name": "orders",
+      "columns": [
+        {
+          "name": "id",
+          "type": "bigint",
+          "nullable": false,
+          "default": null,
+          "identity": "by default",
+          "serial": false,
+          "generated": null,
+          "comment": null
+        },
+        {
+          "name": "user_id",
+          "type": "integer",
+          "nullable": false,
+          "default": null,
+          "identity": null,
+          "serial": false,
+          "generated": null,
+          "comment": null
+        },
+        {
+          "name": "total_cents",
+          "type": "integer",
+          "nullable": false,
+          "default": null,
+          "identity": null,
+          "serial": false,
+          "generated": null,
+          "comment": null
+        },
+        {
+          "name": "status",
+          "type": "text",
+          "nullable": false,
+          "default": "'new'",
+          "identity": null,
+          "serial": false,
+          "generated": null,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "identity": null,
+          "serial": false,
+          "generated": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "orders_pkey",
+          "kind": "primary key",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "orders_user_id_fkey",
+          "kind": "foreign key",
+          "definition": "FOREIGN KEY (user_id) REFERENCES users(id)"
+        },
+        {
+          "name": "orders_total_cents_check",
+          "kind": "check",
+          "definition": "CHECK ((total_cents >= 0))"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "orders_user_id_idx",
+          "definition": "CREATE INDEX ON public.orders USING btree (user_id)"
+        }
+      ],
+      "rls_enabled": true,
+      "rls_forced": false,
+      "policies": [
+        {
+          "name": "orders_owner_only",
+          "command": "ALL",
+          "permissive": true,
+          "roles": [
+            "app_writer"
+          ],
+          "using": "(user_id = (NULLIF(current_setting('app.user_id'::text, true), ''::text))::integer)",
+          "with_check": null
+        }
+      ],
+      "grants": [
+        {
+          "grantee": "app_readonly",
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "app_writer",
+          "privilege": "SELECT"
+        },
+        {
+          "grantee": "app_writer",
+          "privilege": "INSERT"
+        },
+        {
+          "grantee": "app_writer",
+          "privilege": "UPDATE"
+        }
+      ],
+      "owner": "app",
+      "comment": null
+    },
+    {
+      "schema_name": "public",
+      "name": "users",
+      "columns": [
+        {
+          "name": "id",
+          "type": "integer",
+          "nullable": false,
+          "default": null,
+          "identity": "always",
+          "serial": false,
+          "generated": null,
+          "comment": null
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "identity": null,
+          "serial": false,
+          "generated": null,
+          "comment": null
+        },
+        {
+          "name": "full_name",
+          "type": "text",
+          "nullable": false,
+          "default": null,
+          "identity": null,
+          "serial": false,
+          "generated": null,
+          "comment": null
+        },
+        {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "nullable": false,
+          "default": "now()",
+          "identity": null,
+          "serial": false,
+          "generated": null,
+          "comment": null
+        }
+      ],
+      "constraints": [
+        {
+          "name": "users_pkey",
+          "kind": "primary key",
+          "definition": "PRIMARY KEY (id)"
+        },
+        {
+          "name": "users_email_key",
+          "kind": "unique",
+          "definition": "UNIQUE (email)"
+        }
+      ],
+      "indexes": [
+        {
+          "name": "users_created_at_idx",
+          "definition": "CREATE INDEX ON public.users USING btree (created_at)"
+        }
+      ],
+      "rls_enabled": false,
+      "rls_forced": false,
+      "policies": [],
+      "grants": [
+        {
+          "grantee": "app_readonly",
+          "privilege": "SELECT"
+        }
+      ],
+      "owner": "app",
+      "comment": "Application users"
+    }
+  ]
+}

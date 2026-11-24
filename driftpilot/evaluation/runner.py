@@ -35,6 +35,11 @@ SETUPS = [
     Setup("rules + cloud LLM", rules=True, llm="cloud"),
     Setup("cloud LLM without rules", rules=False, llm="cloud"),
 ]
+DATABASE_SETUPS = [
+    Setup("raw schema diff", rules=False, llm=None, raw=True),  # every difference is "real"
+    Setup("rules only", rules=True, llm=None),
+    Setup("rules + cloud LLM", rules=True, llm="cloud"),
+]
 ADVERSARIAL_SETUPS = [
     Setup("rules + cloud LLM (no guardrails)", rules=True, llm="cloud", guardrails=False),
     Setup("rules + cloud LLM + guardrails", rules=True, llm="cloud"),
@@ -116,13 +121,16 @@ def run_case(
     case: Case, setup: Setup, llm: LLMClient | None, root: Path, fixtures: Path
 ) -> list[Item]:
     plan = case.plan(fixtures)
-    findings = parse_plan(plan, case.id, EVAL_TIME) if plan else []
+    if case.database is not None:  # a database case has no Terraform plan: it compares catalogs
+        findings = case.database_findings(root / "eval" / "cases" / "catalogs")
+    else:
+        findings = parse_plan(plan, case.id, EVAL_TIME) if plan else []
     unmanaged = [u] if (u := case.unmanaged_finding()) else []
 
     resources = resource_values(plan) if plan else {}
     verdicts: dict[str, Verdict] = {}
     if not setup.raw:
-        if setup.rules and plan:
+        if setup.rules and findings:
             verdicts = apply_rules(findings, load_rules(), resources)
         if llm is not None and findings:
             verdicts |= triage_findings(

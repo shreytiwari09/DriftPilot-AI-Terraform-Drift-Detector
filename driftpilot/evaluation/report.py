@@ -100,9 +100,82 @@ def adversarial_markdown(cases: list[Case], results: list[SetupResult]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def splice_section(summary: str, section: str) -> str:
-    """Replace the adversarial section of an existing summary, or append it."""
-    start = summary.find(ADVERSARIAL_HEADING)
+DATABASE_HEADING = "## Database schema drift evaluation"
+
+
+def database_markdown(cases: list[Case], results: list[SetupResult]) -> str:
+    """The database cases: the same metrics per setup, plus what each setup still gets wrong."""
+    ran = [r for r in results if not r.skipped]
+    items = ran[0].items if ran else []
+    lines = [
+        DATABASE_HEADING,
+        "",
+        f"{len(cases)} cases, {len(items)} labelled findings (Postgres, "
+        "`eval/cases/database.yaml`): the schema the migrations build against a live schema that "
+        "someone changed by hand. "
+        "No Terraform and no live database is needed: the cases are catalogs plus hand changes. "
+        "The main tables above do not include them.",
+        "",
+        "| Setup | " + " | ".join(label for _, label in METRICS) + " | LLM calls |",
+        "| --- | " + " | ".join("---:" for _ in METRICS) + " | ---: |",
+    ]
+    for r in results:
+        if r.skipped:
+            lines.append(
+                f"| {r.setup.name} | "
+                + " | ".join("—" for _ in METRICS)
+                + f" | not run: {r.skipped} |"
+            )
+            continue
+        m = r.metrics()
+        calls = f"{r.llm_calls + r.cache_hits}" if r.setup.llm else "0"
+        lines.append(
+            f"| {r.setup.name} | "
+            + " | ".join(_pct(m[key]) for key, _ in METRICS)
+            + f" | {calls} |"
+        )
+    best = next((r for r in reversed(ran) if r.setup.llm), None) or (ran[-1] if ran else None)
+    if best is not None and best.setup.rules:
+        wrong = [
+            i
+            for i in best.items
+            if i.label_real
+            and (i.pred_severity != i.label_severity or i.pred_action not in i.label_actions)
+        ]
+        lines += [
+            "",
+            f"Where `{best.setup.name}` is not right ({len(wrong)} of "
+            f"{sum(i.label_real for i in best.items)} real findings):",
+            "",
+        ]
+        lines += [
+            f"- `{i.case_id}` `{i.attribute or '—'}`: expected {i.label_severity} / "
+            f"{'|'.join(i.label_actions)}, got {i.pred_severity or 'needs triage'} / "
+            f"{i.pred_action or '—'} ({i.source or 'no one'})"
+            for i in wrong
+        ] or ["- none"]
+        noise_wrong = [i for i in best.items if not i.label_real and i.pred_real]
+        if noise_wrong:
+            lines += ["", "Noise reported as drift:", ""]
+            lines += [
+                f"- `{i.case_id}` `{i.attribute or '—'}`: reported as {i.pred_severity} / "
+                f"{i.pred_action} ({i.source})"
+                for i in noise_wrong
+            ]
+    lines += [
+        "",
+        '- *rules only* leaves findings no rule decides as "needs triage": they count as real '
+        "(a person sees them) but with no severity or action, so severity and action accuracy "
+        "show what the AI has to add.",
+        "- Weakenings of row-level security, policies and grants to PUBLIC are decided by rules "
+        "and are on the never-soften list, so the AI cannot play them down.",
+    ]
+    return "\n".join(lines) + "\n"
+
+
+def splice_section(summary: str, section: str, heading: str = ADVERSARIAL_HEADING) -> str:
+    """Replace one section (by its heading) of an existing summary, or append it."""
+    start = summary.find(heading)
     if start < 0:
         return summary.rstrip("\n") + "\n\n" + section
     end = summary.find("\n## ", start + 1)
@@ -117,6 +190,7 @@ def summary_markdown(
     extras: list[str],
     model: str | None,
     adversarial: str | None = None,
+    database: str | None = None,
 ) -> str:
     ran = next(r for r in results if not r.skipped)
     lines = [
@@ -176,6 +250,8 @@ def summary_markdown(
         ]
     if adversarial:
         lines += ["", *adversarial.rstrip("\n").split("\n")]
+    if database:
+        lines += ["", *database.rstrip("\n").split("\n")]
     if extras:
         lines += ["", *extras]
     return "\n".join(lines) + "\n"
