@@ -22,3 +22,10 @@ drift.json
 
 # Cloud runner output when not run by GitHub Actions
 driftpilot-outputs.json
+
+# AWS demo (demo/aws): state holds the generated database password, so it stays local. Covered by the
+# patterns above too; spelled out here so nobody removes them by accident.
+demo/aws/terraform.tfvars
+demo/aws/terraform.tfstate*
+demo/aws/.terraform/
+demo/aws/.demo.plan
