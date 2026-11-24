@@ -29,6 +29,11 @@ def mask_ids(text: str | None) -> str | None:
     return _ACCOUNT_ID.sub("*" * 12, _ARN.sub("arn:***", text))
 
 
+def mask_accounts(text: str) -> str:
+    """Hide only 12-digit account IDs (ARNs stay readable)."""
+    return _ACCOUNT_ID.sub("*" * 12, text)
+
+
 def clean_label(value: Any, limit: int = 40) -> str | None:
     """A short, safe label from text someone else may have written (None if nothing is left)."""
     if not isinstance(value, str):

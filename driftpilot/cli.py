@@ -9,6 +9,7 @@ import typer
 from rich.console import Console
 
 from driftpilot import __version__
+from driftpilot.cloud_events import CloudEvent, load_events, parse_events
 from driftpilot.collector import TerraformError
 from driftpilot.config import Config, load_config
 from driftpilot.envfile import load_env_file
@@ -59,9 +60,12 @@ def _scan_or_exit(
     llm: AuditingLLM | None,
     plan_json: Path | None = None,
     state_json: Path | None = None,
+    events: list[CloudEvent] | None = None,
 ) -> ScanResult:
     try:
-        return run_scan(working_dir, config, plan_json=plan_json, state_json=state_json, llm=llm)
+        return run_scan(
+            working_dir, config, plan_json=plan_json, state_json=state_json, llm=llm, events=events
+        )
     except (TerraformError, OSError, ValueError) as e:
         err_console.print(f"[red]error:[/] {e}")
         raise typer.Exit(1) from e
@@ -88,10 +92,21 @@ def scan(
     history: Annotated[
         Path | None, typer.Option(help="Append this scan to a local history folder.")
     ] = None,
+    event: Annotated[
+        Path | None,
+        typer.Option(help="A CloudTrail event (as EventBridge delivers it): who changed what."),
+    ] = None,
 ) -> None:
     """Check a Terraform directory for drift and unmanaged resources."""
     cfg = _load(directory, config)
-    result = _scan_or_exit(directory, cfg, _make_llm(cfg, use_llm), plan_json, state_json)
+    events = None
+    if event is not None:
+        try:
+            events = load_events(event)
+        except (OSError, ValueError) as e:
+            err_console.print(f"[red]error:[/] {e}")
+            raise typer.Exit(1) from e
+    result = _scan_or_exit(directory, cfg, _make_llm(cfg, use_llm), plan_json, state_json, events)
     if history is not None:
         from driftpilot.history.store import LocalStore, append_scan
 
@@ -232,6 +247,49 @@ def _learn_and_publish(result: ScanResult, output, branch: str, cfg: Config) -> 
     return "\n".join(lines) + "\n"
 
 
+CHECKS = ("infrastructure", "database")
+
+
+def _parse_checks(text: str) -> list[str]:
+    checks = [c.strip() for c in text.split(",") if c.strip()] or ["infrastructure"]
+    unknown = [c for c in checks if c not in CHECKS]
+    if unknown:
+        err_console.print(
+            f"[red]error:[/] unknown check {unknown[0]!r} (allowed: {', '.join(CHECKS)})"
+        )
+        raise typer.Exit(1)
+    return checks
+
+
+def _action_events(path: Path | None, text: str | None) -> tuple[list[CloudEvent], list[str]]:
+    """Cloud events for the action, from a file or JSON text; a bad one is reported, not fatal."""
+    try:
+        if path is not None:
+            return load_events(path), []
+        if text:
+            return parse_events(text, "DRIFTPILOT_EVENT_JSON"), []
+    except (OSError, ValueError) as e:
+        return [], [f"event: {e}"]
+    return [], []
+
+
+def _write_outputs(result: ScanResult) -> None:
+    """Action outputs: GitHub's file when running there, else driftpilot-outputs.json."""
+    c = counts(result)
+    values = {
+        "drift-found": "true" if result.real_findings or result.unmanaged else "false",
+        "critical-count": str(c["critical"]),
+        "finding-count": str(len(result.real_findings)),
+        "unmanaged-count": str(c["unmanaged"]),
+    }
+    if path := os.environ.get("GITHUB_OUTPUT"):
+        with open(path, "a") as f:
+            f.writelines(f"{key}={value}\n" for key, value in values.items())
+    else:
+        target = Path(os.environ.get("DRIFTPILOT_OUTPUTS_FILE", "driftpilot-outputs.json"))
+        target.write_text(json.dumps({**values, "run-id": result.run_id}, indent=2) + "\n")
+
+
 @app.command()
 def action(
     working_directory: Annotated[
@@ -243,13 +301,35 @@ def action(
     mode: Annotated[
         str | None, typer.Option(envvar="DRIFTPILOT_MODE", help="advise or open-prs.")
     ] = None,
+    checks: Annotated[
+        str,
+        typer.Option(envvar="DRIFTPILOT_CHECKS", help="Comma list: infrastructure, database."),
+    ] = "infrastructure",
+    event: Annotated[
+        Path | None,
+        typer.Option(
+            "--event",
+            "--event-path",
+            envvar="DRIFTPILOT_EVENT_PATH",
+            help="A CloudTrail event file (who changed what).",
+        ),
+    ] = None,
 ) -> None:
-    """Entry point for the GitHub Action: scan, triage, open issues/PRs, write the job summary."""
+    """Entry point for the GitHub Action and the cloud runner.
+
+    Scans, triages, opens issues/PRs, and writes the summary and outputs: to GitHub's files when
+    run by GitHub Actions, else the summary is printed and outputs go to driftpilot-outputs.json.
+    """
+    selected = _parse_checks(checks)
     cfg = _load(working_directory, config_path if config_path.exists() else None)
     if mode:
         cfg = cfg.model_copy(update={"mode": mode})
     llm = _make_llm(cfg, True)
-    result = _scan_or_exit(working_directory, cfg, llm)
+    events, event_errors = _action_events(event, os.environ.get("DRIFTPILOT_EVENT_JSON"))
+    result = _scan_or_exit(working_directory, cfg, llm, events=events)
+    result.errors += event_errors
+    if "database" in selected:
+        result.errors.append("database checks are not available in this version of DriftPilot")
 
     token = os.environ.get("DRIFTPILOT_GITHUB_TOKEN")
     repo_name = os.environ.get("GITHUB_REPOSITORY")
@@ -280,17 +360,13 @@ def action(
     else:
         print(summary)
 
-    c = counts(result)
-    if path := os.environ.get("GITHUB_OUTPUT"):
-        with open(path, "a") as f:
-            f.write(
-                f"drift-found={'true' if result.real_findings or result.unmanaged else 'false'}\n"
-            )
-            f.write(f"critical-count={c['critical']}\n")
-            f.write(f"finding-count={len(result.real_findings)}\n")
-            f.write(f"unmanaged-count={c['unmanaged']}\n")
-    if c["critical"]:  # annotation shown at the top of the workflow run page
-        print(f"::error title=DriftPilot::{c['critical']} critical drift finding(s)")
+    _write_outputs(result)
+    if critical := counts(result)["critical"]:
+        if os.environ.get("GITHUB_ACTIONS") or os.environ.get("GITHUB_OUTPUT"):
+            # annotation shown at the top of the workflow run page
+            print(f"::error title=DriftPilot::{critical} critical drift finding(s)")
+        else:
+            print(f"DriftPilot: {critical} critical drift finding(s)")
 
 
 @app.command()

@@ -78,6 +78,12 @@ def fallback_verdict(finding_id: str, why: str, prompt_version: str | None) -> V
     )
 
 
+def finding_texts(f: DriftFinding) -> list:
+    """Everything about a finding that someone else may have written (for injection signals)."""
+    context = f.change_context.model_dump() if f.change_context else None
+    return [f.address, f.attribute_path, f.before, f.after, context]
+
+
 def shown_path(f: DriftFinding, guardrails: bool = True) -> str | None:
     """The attribute path as the model sees it (and must echo back)."""
     return sanitize_text(f.attribute_path) if guardrails and f.attribute_path else f.attribute_path
@@ -109,13 +115,17 @@ def build_input(
         if guardrails and events is not None and altered([f.before, f.after]):
             events.append(GuardrailEvent(kind="sanitized", finding_id=f.id, detail="values"))
         changes.append(change)
-    return {
+    payload = {
         "resource_type": clean(first.resource_type),
         "address": clean(first.address),
         "detected_at": first.detected_at.isoformat(),
         "resource_code": clean(block.text, CODE_LIMIT, keep_layout=True) if block else None,
         "changes": changes,
     }
+    if context := next((f.change_context for f in findings if f.change_context), None):
+        # Who changed it, from a cloud audit event: data like the rest, never instructions.
+        payload["change_event"] = clean(context.model_dump(exclude_none=True))
+    return payload
 
 
 def triage_resource(
@@ -145,7 +155,7 @@ def triage_resource(
         call_events += [
             GuardrailEvent(kind="suspicious-input", finding_id=f.id, detail=", ".join(signals))
             for f in findings
-            if (signals := injection_signals([f.address, f.attribute_path, f.before, f.after]))
+            if (signals := injection_signals(finding_texts(f)))
         ]
         if events is not None:
             events += seen

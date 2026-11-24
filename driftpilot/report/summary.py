@@ -1,6 +1,6 @@
 """Markdown report for the GitHub Actions job summary (SPEC §4.7)."""
 
-from driftpilot.models import ScanResult
+from driftpilot.models import DriftFinding, ScanResult
 from driftpilot.report import change_text, counts, decided_by, sorted_findings
 
 _BADGE = {
@@ -15,6 +15,26 @@ _BADGE = {
 
 def _cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
+
+
+def _changed_by_section(findings: list[DriftFinding]) -> list[str]:
+    """Who changed what, for findings a cloud audit event was matched to."""
+    rows = []
+    for f in findings:
+        c = f.change_context
+        if c is None:
+            continue
+        who = f"`{_cell(c.actor)}`" if c.actor else "unknown"
+        rows.append(
+            f"| `{_cell(f.address)}` | {who} | `{_cell(c.event_name)}` "
+            f"| {_cell(c.event_source or '—')} | {_cell(c.event_time or '—')} |"
+        )
+    if not rows:
+        return []
+    header = ["| Resource | Changed by | Call | Source | Time |", "| --- | --- | --- | --- | --- |"]
+    seen = list(dict.fromkeys(rows))
+    return ["", "### Who changed it", "", "Matched from a cloud audit event by name or ID.", "",
+            *header, *seen]  # fmt: skip
 
 
 def _guardrails_section(result: ScanResult) -> list[str]:
@@ -71,22 +91,27 @@ def build_summary(result: ScanResult) -> str:
         lines += ["", f"_{c['noise']} noise finding(s) filtered by rules._"]
 
     if real:
+        tagged = any((v := result.verdicts.get(f.id)) and v.controls for f in real)
         lines += [
             "",
             "### Drift",
             "",
-            "| Severity | Resource | Setting | Change | Action | Why |",
-            "| --- | --- | --- | --- | --- | --- |",
+            "| Severity | Resource | Setting | Change | Action |"
+            + (" Compliance tags |" if tagged else "")
+            + " Why |",
+            "| --- | --- | --- | --- | --- |" + (" --- |" if tagged else "") + " --- |",
         ]
         for f in real:
             v = result.verdicts.get(f.id)
             why = f"{v.reason} _({decided_by(v)})_" if v else decided_by(v)
             action = f"`{v.recommended_action}`" if v else "—"
+            tags = f" {', '.join(f'`{c}`' for c in v.controls) if v and v.controls else '—'} |"
             lines.append(
                 f"| {_BADGE[v.severity if v else 'triage']} | `{_cell(f.address)}` "
-                f"| `{_cell(f.attribute_path or '—')}` | {_cell(change_text(f))} | {action} "
-                f"| {_cell(why)} |"
+                f"| `{_cell(f.attribute_path or '—')}` | {_cell(change_text(f))} | {action} |"
+                f"{tags if tagged else ''} {_cell(why)} |"
             )
+        lines += _changed_by_section(real)
 
     if result.unmanaged:
         lines += [

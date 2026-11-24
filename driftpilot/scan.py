@@ -5,6 +5,7 @@ import uuid
 from datetime import UTC, datetime
 from pathlib import Path
 
+from driftpilot.cloud_events import CloudEvent, attach_event_context
 from driftpilot.collector import (
     managed_resource_count,
     managed_resources,
@@ -71,10 +72,12 @@ def run_scan(
     plan_json: Path | None = None,
     state_json: Path | None = None,
     llm: LLMClient | None = None,
+    events: list[CloudEvent] | None = None,
 ) -> ScanResult:
     """Run a scan. `plan_json` / `state_json` replay recorded files instead of calling Terraform.
 
-    Without an `llm`, findings no rule decides stay undecided ("needs triage").
+    Without an `llm`, findings no rule decides stay undecided ("needs triage"). `events` are cloud
+    audit events: the one that touched a resource is attached ("changed by ...") before triage.
     """
     now = datetime.now(UTC)
     result = ScanResult(
@@ -95,6 +98,8 @@ def run_scan(
     result.unmanaged = _scan_unmanaged(
         result, config, working_dir, plan_json is not None, state_json
     )
+
+    attach_event_context(result.findings, result.unmanaged, resources, events or [])
 
     if llm is not None:
         result.verdicts |= triage_findings(

@@ -1,0 +1,60 @@
+{
+  "version": "0",
+  "id": "6a7e8feb-b491-4cf7-a9f1-bf3703467718",
+  "detail-type": "AWS API Call via CloudTrail",
+  "source": "aws.ec2",
+  "account": "123456789012",
+  "time": "2026-11-20T10:02:44Z",
+  "region": "eu-west-1",
+  "resources": [],
+  "detail": {
+    "eventVersion": "1.08",
+    "userIdentity": {
+      "type": "IAMUser",
+      "principalId": "AIDAEXAMPLEID",
+      "arn": "arn:aws:iam::123456789012:user/bob",
+      "accountId": "123456789012",
+      "accessKeyId": "AKIAEXAMPLEEXAMPLE12",
+      "userName": "bob"
+    },
+    "eventTime": "2026-11-20T10:02:44Z",
+    "eventSource": "ec2.amazonaws.com",
+    "eventName": "AuthorizeSecurityGroupIngress",
+    "awsRegion": "eu-west-1",
+    "sourceIPAddress": "198.51.100.7",
+    "userAgent": "aws-cli/2.15.0",
+    "requestParameters": {
+      "groupId": "sg-0abc123def4567890",
+      "ipPermissions": {
+        "items": [
+          {
+            "ipProtocol": "tcp",
+            "fromPort": 22,
+            "toPort": 22,
+            "groups": {},
+            "ipRanges": {
+              "items": [
+                {
+                  "cidrIp": "0.0.0.0/0"
+                }
+              ]
+            },
+            "ipv6Ranges": {},
+            "prefixListIds": {}
+          }
+        ]
+      }
+    },
+    "responseElements": {
+      "requestId": "EXAMPLE",
+      "_return": true
+    },
+    "requestID": "EXAMPLE",
+    "eventID": "22222222-3333-4444-5555-666666666666",
+    "readOnly": false,
+    "eventType": "AwsApiCall",
+    "managementEvent": true,
+    "recipientAccountId": "123456789012",
+    "eventCategory": "Management"
+  }
+}

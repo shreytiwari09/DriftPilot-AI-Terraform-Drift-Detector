@@ -9,6 +9,12 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 
 @pytest.fixture(autouse=True)
+def outputs_file_in_tmp(monkeypatch, tmp_path) -> None:
+    """`driftpilot action` outside GitHub writes an outputs file: never into the repo."""
+    monkeypatch.setenv("DRIFTPILOT_OUTPUTS_FILE", str(tmp_path / "driftpilot-outputs.json"))
+
+
+@pytest.fixture(autouse=True)
 def no_real_llm(monkeypatch) -> None:
     """Unit tests make no network calls: never load .env or see a real LLM key."""
     monkeypatch.setattr("driftpilot.cli.load_env_file", lambda *a, **k: [])

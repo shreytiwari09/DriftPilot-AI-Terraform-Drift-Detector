@@ -19,3 +19,6 @@ __pycache__/
 *.plan
 drift.json
 .DS_Store
+
+# Cloud runner output when not run by GitHub Actions
+driftpilot-outputs.json

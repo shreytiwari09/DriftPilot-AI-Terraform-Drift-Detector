@@ -1,0 +1,58 @@
+{
+  "version": "0",
+  "id": "9b2f5c0a-1111-4d3e-8a55-0d1c2b3a4e5f",
+  "detail-type": "AWS API Call via CloudTrail",
+  "source": "aws.s3",
+  "account": "123456789012",
+  "time": "2026-11-20T09:41:07Z",
+  "region": "eu-west-1",
+  "resources": [],
+  "detail": {
+    "eventVersion": "1.09",
+    "userIdentity": {
+      "type": "AssumedRole",
+      "principalId": "AROAEXAMPLEID:alice",
+      "arn": "arn:aws:sts::123456789012:assumed-role/PlatformAdmin/alice",
+      "accountId": "123456789012",
+      "accessKeyId": "ASIAEXAMPLEEXAMPLE12",
+      "sessionContext": {
+        "sessionIssuer": {
+          "type": "Role",
+          "principalId": "AROAEXAMPLEID",
+          "arn": "arn:aws:iam::123456789012:role/PlatformAdmin",
+          "accountId": "123456789012",
+          "userName": "PlatformAdmin"
+        }
+      }
+    },
+    "eventTime": "2026-11-20T09:41:07Z",
+    "eventSource": "s3.amazonaws.com",
+    "eventName": "PutBucketPolicy",
+    "awsRegion": "eu-west-1",
+    "sourceIPAddress": "203.0.113.25",
+    "userAgent": "[console.amazonaws.com]",
+    "requestParameters": {
+      "bucketName": "acme-data",
+      "Host": "acme-data.s3.eu-west-1.amazonaws.com",
+      "policy": {
+        "Version": "2012-10-17",
+        "Statement": [
+          {
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::acme-data/*"
+          }
+        ]
+      }
+    },
+    "responseElements": null,
+    "requestID": "EXAMPLE123456789",
+    "eventID": "11111111-2222-3333-4444-555555555555",
+    "readOnly": false,
+    "eventType": "AwsApiCall",
+    "managementEvent": true,
+    "recipientAccountId": "123456789012",
+    "eventCategory": "Management"
+  }
+}

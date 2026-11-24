@@ -1,0 +1,27 @@
+{
+  "eventVersion": "1.08",
+  "userIdentity": {
+    "type": "Root",
+    "principalId": "123456789012",
+    "arn": "arn:aws:iam::123456789012:root",
+    "accountId": "123456789012",
+    "accessKeyId": "ASIAEXAMPLEEXAMPLE12"
+  },
+  "eventTime": "2026-11-20T11:15:00Z",
+  "eventSource": "cloudtrail.amazonaws.com",
+  "eventName": "StopLogging",
+  "awsRegion": "us-east-1",
+  "sourceIPAddress": "192.0.2.44",
+  "userAgent": "console.amazonaws.com",
+  "requestParameters": {
+    "name": "arn:aws:cloudtrail:us-east-1:123456789012:trail/main"
+  },
+  "responseElements": null,
+  "requestID": "EXAMPLE",
+  "eventID": "33333333-4444-5555-6666-777777777777",
+  "readOnly": false,
+  "eventType": "AwsApiCall",
+  "managementEvent": true,
+  "recipientAccountId": "123456789012",
+  "eventCategory": "Management"
+}

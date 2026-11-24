@@ -241,3 +241,128 @@ def test_report_hides_addresses_when_configured(tmp_path: Path) -> None:
     assert runner.invoke(app, args).exit_code == 0
     for name in ("index.html", "data.json"):
         assert "app3" not in (out / name).read_text()
+
+
+# ---- cloud events, checks, and running outside GitHub Actions ----
+
+AWS = FIXTURES / "aws"
+
+
+def bucket_plan_file(tmp_path: Path) -> Path:
+    policy = (
+        '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*",'
+        '"Action":"s3:GetObject","Resource":"*"}]}'
+    )
+    change = {
+        "actions": ["update"],
+        "before": {"bucket": "acme-data", "policy": "{}"},
+        "after": {"bucket": "acme-data", "policy": policy},
+    }
+    plan = {
+        "resource_drift": [
+            {
+                "address": "aws_s3_bucket_policy.data",
+                "type": "aws_s3_bucket_policy",
+                "provider_name": "aws",
+                "change": change,
+            }
+        ]
+    }
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    return path
+
+
+def test_scan_event_attaches_who_changed_it(tmp_path: Path) -> None:
+    event = AWS / "cloudtrail_put_bucket_policy.json"
+    args = ["scan", "--plan-json", str(bucket_plan_file(tmp_path)), "--no-llm", "--json"]
+    result = runner.invoke(app, [*args, "--event", str(event)])
+    assert result.exit_code == 0, result.output
+    [finding] = json.loads(result.stdout)["findings"]
+    assert finding["change_context"]["actor"] == "assumed-role/PlatformAdmin/alice"
+
+
+def test_scan_with_a_bad_event_file_exits_1(tmp_path: Path) -> None:
+    bad = tmp_path / "e.json"
+    bad.write_text('{"hello": 1}')
+    args = ["scan", "--plan-json", str(bucket_plan_file(tmp_path)), "--no-llm", "--event", str(bad)]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 1 and "CloudTrail" in result.output
+
+
+def run_action(tmp_path: Path, monkeypatch, env: dict[str, str] | None = None):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+    monkeypatch.delenv("DRIFTPILOT_OUTPUTS_FILE", raising=False)  # use the default file name
+    monkeypatch.setenv("DRIFTPILOT_WORKING_DIRECTORY", str(tmp_path))
+    for key, value in (env or {}).items():
+        monkeypatch.setenv(key, value)
+    plan = json.loads(bucket_plan_file(tmp_path).read_text())
+    with (
+        patch("driftpilot.scan.terraform_init"),
+        patch("driftpilot.scan.refresh_only_plan", return_value=plan),
+    ):
+        return runner.invoke(app, ["action"])
+
+
+def test_action_outside_github_prints_summary_and_writes_outputs_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    result = run_action(tmp_path, monkeypatch)
+    assert result.exit_code == 0, result.output
+    assert "## DriftPilot drift report" in result.output
+    assert "::error" not in result.output  # a GitHub annotation means nothing elsewhere
+    outputs = json.loads((tmp_path / "driftpilot-outputs.json").read_text())
+    assert outputs["drift-found"] == "true" and outputs["critical-count"] == "1"
+    assert outputs["finding-count"] == "1" and outputs["unmanaged-count"] == "0"
+
+
+def test_action_inside_github_does_not_write_the_outputs_file(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("GITHUB_OUTPUT", str(tmp_path / "out.txt"))
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("DRIFTPILOT_WORKING_DIRECTORY", str(tmp_path))
+    plan = json.loads(bucket_plan_file(tmp_path).read_text())
+    with (
+        patch("driftpilot.scan.terraform_init"),
+        patch("driftpilot.scan.refresh_only_plan", return_value=plan),
+    ):
+        result = runner.invoke(app, ["action"])
+    assert result.exit_code == 0, result.output
+    assert not (tmp_path / "driftpilot-outputs.json").exists()
+
+
+def test_action_reads_the_event_from_a_file(tmp_path: Path, monkeypatch) -> None:
+    env = {"DRIFTPILOT_EVENT_PATH": str(AWS / "cloudtrail_put_bucket_policy.json")}
+    result = run_action(tmp_path, monkeypatch, env)
+    assert "### Who changed it" in result.output
+    assert "assumed-role/PlatformAdmin/alice" in result.output
+
+
+def test_action_reads_the_event_from_json_text(tmp_path: Path, monkeypatch) -> None:
+    text = (AWS / "cloudtrail_put_bucket_policy.json").read_text()
+    result = run_action(tmp_path, monkeypatch, {"DRIFTPILOT_EVENT_JSON": text})
+    assert "assumed-role/PlatformAdmin/alice" in result.output
+
+
+def test_action_with_a_bad_event_still_reports_the_drift(tmp_path: Path, monkeypatch) -> None:
+    bad = tmp_path / "bad.json"
+    bad.write_text("nope")
+    result = run_action(tmp_path, monkeypatch, {"DRIFTPILOT_EVENT_PATH": str(bad)})
+    assert result.exit_code == 0
+    assert "aws_s3_bucket_policy.data" in result.output and "not valid JSON" in result.output
+
+
+def test_action_with_an_event_path_that_is_not_there_says_so(tmp_path: Path, monkeypatch) -> None:
+    result = run_action(tmp_path, monkeypatch, {"DRIFTPILOT_EVENT_PATH": str(tmp_path / "nope")})
+    assert result.exit_code == 0 and "event" in result.output and "nope" in result.output
+
+
+def test_action_checks_must_be_known(tmp_path: Path, monkeypatch) -> None:
+    result = run_action(tmp_path, monkeypatch, {"DRIFTPILOT_CHECKS": "infrastructure,magic"})
+    assert result.exit_code == 1 and "magic" in result.output
+
+
+def test_action_default_check_is_infrastructure(tmp_path: Path, monkeypatch) -> None:
+    result = run_action(tmp_path, monkeypatch, {"DRIFTPILOT_CHECKS": "infrastructure"})
+    assert result.exit_code == 0 and "aws_s3_bucket_policy.data" in result.output

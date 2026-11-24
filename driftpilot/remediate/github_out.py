@@ -133,12 +133,41 @@ def _guardrail_notes(item: Item) -> list[str]:
     return ["", "### Guardrails", "", *notes] if notes else []
 
 
+def _controls(item: Item) -> list[str]:
+    """Compliance tags of every verdict in this item, in first-seen order."""
+    tags: list[str] = []
+    for f in [*item.findings, *item.unmanaged]:
+        if v := item.verdicts.get(f.id):
+            tags += [c for c in v.controls if c not in tags]
+    return tags
+
+
+def _changed_by(item: Item) -> list[str]:
+    """ "Changed by ... via ..." when a cloud audit event named the resource, else nothing."""
+    contexts = [c for f in [*item.findings, *item.unmanaged] if (c := f.change_context)]
+    if not contexts:
+        return []
+    c = max(contexts, key=lambda c: c.event_time or "")
+    clean = lambda text: _cell(text).replace("'", "")  # noqa: E731
+    who = f"`{clean(c.actor)}`" if c.actor else "an unknown identity"
+    where = f" ({clean(c.event_source)})" if c.event_source else ""
+    when = f" at {clean(c.event_time)}" if c.event_time else ""
+    return [f"**Changed by:** {who} via `{clean(c.event_name)}`{where}{when}"]
+
+
+def _facts(item: Item) -> list[str]:
+    tags = _controls(item)
+    out = [f"**Compliance tags:** {', '.join(f'`{t}`' for t in tags)}"] if tags else []
+    return out + _changed_by(item)
+
+
 def issue_body(item: Item, patch: Patch | None, run_url: str | None) -> str:
     p = item.plan
     lines = [
         marker(p.key),
         f"**Severity:** {p.severity} · **Recommended action:** `{p.action}` — "
         f"{ACTION_TEXT[p.action]}",
+        *_facts(item),
         "",
         f"### What changed on `{p.address}`",
         "",
@@ -170,6 +199,7 @@ def pr_body(item: Item, patch: Patch, run_url: str | None) -> str:
         [
             marker(p.key),
             f"**Action:** `{p.action}` — {ACTION_TEXT[p.action]} · **Severity:** {p.severity}",
+            *_facts(item),
             "",
             f"### What changed on `{p.address}`",
             "",
