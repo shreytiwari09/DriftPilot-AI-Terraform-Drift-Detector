@@ -39,9 +39,22 @@ class GitHubScannerConfig(BaseModel):
     ignore_names: list[str] = []
 
 
+class AWSScannerConfig(BaseModel):
+    enabled: bool = True
+    region: str = "us-east-1"
+    include_names: list[str] = ["*"]
+    ignore_names: list[str] = []
+    resource_types: list[Literal["s3_bucket", "security_group", "iam_user"]] = [
+        "s3_bucket",
+        "security_group",
+        "iam_user",
+    ]
+
+
 class ScannersConfig(BaseModel):
     docker: DockerScannerConfig | None = None
     github: GitHubScannerConfig | None = None
+    aws: AWSScannerConfig | None = None
 
 
 class GuardrailsConfig(BaseModel):

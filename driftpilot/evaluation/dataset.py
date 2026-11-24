@@ -38,7 +38,7 @@ class InlineDrift(BaseModel):
 
 
 class UnmanagedSpec(BaseModel):
-    provider: Literal["github", "docker"]
+    provider: Literal["github", "docker", "aws"]
     kind: str
     name: str
 

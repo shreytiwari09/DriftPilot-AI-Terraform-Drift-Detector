@@ -4,11 +4,13 @@ import os
 
 from driftpilot.config import Config
 from driftpilot.models import UnmanagedFinding
+from driftpilot.scanners import aws as aws_scanner
 from driftpilot.scanners import docker as docker_scanner
 from driftpilot.scanners import github as github_scanner
 from driftpilot.scanners.base import ImportTarget, Scanner
 
 _IMPORT_TARGETS = {
+    aws_scanner.PROVIDER: aws_scanner.import_target,
     docker_scanner.PROVIDER: docker_scanner.import_target,
     github_scanner.PROVIDER: github_scanner.import_target,
 }
@@ -51,6 +53,24 @@ def build_scanners(config: Config) -> list[Scanner]:
                 github_cfg.owner,
                 github_cfg.ignore_names,
                 github_cfg.include_names,
+            )
+        )
+    aws_cfg = config.scanners.aws
+    if aws_cfg and aws_cfg.enabled:
+        try:
+            import boto3
+        except ImportError as e:
+            raise RuntimeError("AWS scanner needs boto3: pip install 'driftpilot[aws]'") from e
+
+        from driftpilot.scanners.aws import AWSScanner
+
+        scanners.append(
+            AWSScanner(
+                boto3.Session(region_name=aws_cfg.region),
+                aws_cfg.region,
+                aws_cfg.ignore_names,
+                aws_cfg.include_names,
+                aws_cfg.resource_types,
             )
         )
     return scanners
