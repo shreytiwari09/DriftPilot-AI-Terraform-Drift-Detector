@@ -12,13 +12,17 @@ Scenarios 15-19 change the local Postgres demo in demo/postgres (docker compose 
 its owner role `app`. They only ever connect to localhost (set DRIFTPILOT_DEMO_ADMIN_URL for
 another port).
 
-Scenarios 20-24 change the real AWS demo in demo/aws (see its README). They need
-DRIFTPILOT_AWS_DEMO=1, a region in AWS_REGION (or AWS_DEFAULT_REGION), credentials from
-AWS_PROFILE, and they refuse to touch any resource that is not tagged demo=driftpilot.
+Scenarios 20-26 change the real AWS demo in demo/aws (see its README). They need
+DRIFTPILOT_AWS_DEMO=1, credentials from AWS_PROFILE, and they refuse to touch any resource that is
+not tagged demo=driftpilot. The demo has two scopes (`demo_scope` in demo/aws/terraform.tfvars, or
+DRIFTPILOT_AWS_DEMO_SCOPE): "s3" (default, us-east-1) allows 20, 24, 25 and 26 on the bucket;
+"full" (ap-south-1) also allows 21-23 (security group, RDS). The region comes from AWS_REGION (or
+AWS_DEFAULT_REGION), defaults to the scope's region, and any other region is refused.
 """
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -49,6 +53,8 @@ AWS_BUCKET_PREFIX = "driftpilot-demo-"
 AWS_SG_NAME = "driftpilot-demo-db"
 AWS_DB_ID = "driftpilot-demo-db"
 AWS_HAND_TAG = ("reviewed-by", "hand")  # scenario 24 adds this tag
+AWS_SCOPE_REGIONS = {"s3": "us-east-1", "full": "ap-south-1"}
+AWS_TFVARS = Path(__file__).resolve().parents[1] / "demo" / "aws" / "terraform.tfvars"
 
 
 @dataclass
@@ -230,13 +236,37 @@ PG_SCENARIOS = {
 # ---------- AWS scenarios (demo/aws, real AWS: only resources tagged demo=driftpilot) ----------
 
 
-def aws_session() -> Any:
-    """A boto3 session for the demo region. Refuses to run unless DRIFTPILOT_AWS_DEMO=1."""
+def aws_scope() -> str:
+    """The demo scope: DRIFTPILOT_AWS_DEMO_SCOPE, else demo_scope in terraform.tfvars, else s3."""
+    scope = os.environ.get("DRIFTPILOT_AWS_DEMO_SCOPE", "")
+    if not scope and AWS_TFVARS.exists():
+        for line in AWS_TFVARS.read_text().splitlines():
+            match = re.match(r'\s*demo_scope\s*=\s*"([\w-]*)"', line)
+            if match:
+                scope = match.group(1)
+    scope = scope or "s3"
+    if scope not in AWS_SCOPE_REGIONS:
+        sys.exit(f"refusing to run: unknown demo scope {scope!r} (use s3 or full)")
+    return scope
+
+
+def aws_session(needs_full: bool = False) -> Any:
+    """A boto3 session for the demo region. Refuses to run unless DRIFTPILOT_AWS_DEMO=1.
+
+    `needs_full` marks the scenarios that act on the security group or the database.
+    """
     if os.environ.get("DRIFTPILOT_AWS_DEMO") != "1":
         sys.exit("refusing to run: set DRIFTPILOT_AWS_DEMO=1 to confirm you mean the AWS demo")
-    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
-    if not region:
-        sys.exit("refusing to run: set AWS_REGION (the demo's region, e.g. ap-south-1)")
+    scope = aws_scope()
+    if needs_full and scope != "full":
+        sys.exit(
+            "refusing to run: this scenario needs the full demo scope (security group or "
+            'database); the demo is in the "s3" scope'
+        )
+    expected = AWS_SCOPE_REGIONS[scope]
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION") or expected
+    if region != expected:
+        sys.exit(f"refusing to run: the {scope} scope runs in {expected}, not {region}")
     import boto3
 
     return boto3.Session(region_name=region)
@@ -330,7 +360,7 @@ def ssh_open_to_world() -> list[dict[str, Any]]:
 def change_ssh_rule(open_it: bool) -> None:
     from botocore.exceptions import ClientError
 
-    ec2, group_id = demo_security_group(aws_session())
+    ec2, group_id = demo_security_group(aws_session(needs_full=True))
     call = ec2.authorize_security_group_ingress if open_it else ec2.revoke_security_group_ingress
     try:
         call(GroupId=group_id, IpPermissions=ssh_open_to_world())
@@ -343,7 +373,7 @@ def change_ssh_rule(open_it: bool) -> None:
 
 
 def set_backup_retention(days: int) -> None:
-    rds, identifier = demo_db(aws_session())
+    rds, identifier = demo_db(aws_session(needs_full=True))
     rds.modify_db_instance(
         DBInstanceIdentifier=identifier, BackupRetentionPeriod=days, ApplyImmediately=True
     )
@@ -355,7 +385,7 @@ def public_baseline() -> bool:
 
 
 def set_publicly_accessible(value: bool) -> None:
-    rds, identifier = demo_db(aws_session())
+    rds, identifier = demo_db(aws_session(needs_full=True))
     rds.modify_db_instance(
         DBInstanceIdentifier=identifier, PubliclyAccessible=value, ApplyImmediately=True
     )
@@ -372,6 +402,27 @@ def edit_bucket_tag(add: bool) -> None:
     s3.put_bucket_tagging(
         Bucket=bucket, Tagging={"TagSet": [{"Key": k, "Value": v} for k, v in tags.items()]}
     )
+
+
+def set_versioning(enabled: bool) -> None:
+    s3, bucket = demo_bucket(aws_session())
+    s3.put_bucket_versioning(
+        Bucket=bucket, VersioningConfiguration={"Status": "Enabled" if enabled else "Suspended"}
+    )
+
+
+def remove_default_encryption(removed: bool) -> None:
+    """Scenario 26. Revert puts back the SSE-S3 default the code sets (sse_algorithm = AES256)."""
+    s3, bucket = demo_bucket(aws_session())
+    if removed:
+        s3.delete_bucket_encryption(Bucket=bucket)
+    else:
+        s3.put_bucket_encryption(
+            Bucket=bucket,
+            ServerSideEncryptionConfiguration={
+                "Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
+            },
+        )
 
 
 SCENARIOS = {
@@ -415,17 +466,23 @@ SCENARIOS = {
         Scenario(20, "aws", "S3 public access block switched off on the demo bucket",
                  "critical / revert",
                  lambda _: set_public_access_block(False), lambda _: set_public_access_block(True)),
-        Scenario(21, "aws", "Security group opens SSH (22) to 0.0.0.0/0", "critical / revert",
+        Scenario(21, "aws", "[full scope] Security group opens SSH (22) to 0.0.0.0/0",
+                 "critical / revert",
                  lambda _: change_ssh_rule(True), lambda _: change_ssh_rule(False)),
-        Scenario(22, "aws", "RDS backup retention 1 -> 0 days", "high / revert",
+        Scenario(22, "aws", "[full scope] RDS backup retention 1 -> 0 days", "high / revert",
                  lambda _: set_backup_retention(0), lambda _: set_backup_retention(1)),
-        Scenario(23, "aws", "RDS publicly_accessible flipped away from the code's value",
+        Scenario(23, "aws", "[full scope] RDS publicly_accessible flipped from the code's value",
                  "critical if turned on, otherwise ask a person",
                  lambda _: set_publicly_accessible(not public_baseline()),
                  lambda _: set_publicly_accessible(public_baseline())),
         Scenario(24, "aws", f"Harmless tag {AWS_HAND_TAG[0]}={AWS_HAND_TAG[1]} added to the bucket",
                  "low / codify",
                  lambda _: edit_bucket_tag(True), lambda _: edit_bucket_tag(False)),
+        Scenario(25, "aws", "S3 bucket versioning suspended", "high / revert",
+                 lambda _: set_versioning(False), lambda _: set_versioning(True)),
+        Scenario(26, "aws", "S3 bucket default encryption removed", "critical / revert",
+                 lambda _: remove_default_encryption(True),
+                 lambda _: remove_default_encryption(False)),
     ]
 }  # fmt: skip
 
@@ -435,7 +492,7 @@ def main(argv: list[str] | None = None) -> None:
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("command", choices=["list", "inject", "revert"])
-    parser.add_argument("scenarios", nargs="*", type=int, help="scenario numbers (1-24)")
+    parser.add_argument("scenarios", nargs="*", type=int, help="scenario numbers (1-26)")
     parser.add_argument("--tf-dir", type=Path, help="Terraform dir for reverts that need apply")
     args = parser.parse_args(argv)
 
@@ -445,7 +502,7 @@ def main(argv: list[str] | None = None) -> None:
         return
     unknown = [n for n in args.scenarios if n not in SCENARIOS]
     if not args.scenarios or unknown:
-        parser.error(f"give scenario numbers 1-24 (unknown: {unknown})")
+        parser.error(f"give scenario numbers 1-26 (unknown: {unknown})")
     for number in args.scenarios:
         scenario = SCENARIOS[number]
         print(f"{args.command} {number}: {scenario.description}")

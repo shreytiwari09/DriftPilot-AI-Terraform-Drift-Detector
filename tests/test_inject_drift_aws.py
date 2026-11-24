@@ -1,4 +1,4 @@
-"""AWS demo scenarios 20-24, against moto (an offline mock of AWS). No real AWS is ever called."""
+"""AWS demo scenarios 20-26, against moto (an offline mock of AWS). No real AWS is ever called."""
 
 import importlib.util
 from pathlib import Path
@@ -18,13 +18,20 @@ OTHER = [{"Key": "team", "Value": "someone-else"}]
 BUCKET = "driftpilot-demo-abcd1234"
 
 
+S3_REGION = "us-east-1"
+
+
 @pytest.fixture(autouse=True)
-def fake_credentials(monkeypatch):
+def fake_credentials(monkeypatch, tmp_path):
     """Moto needs some credentials; these are fake and never leave the process."""
     for key in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"):
         monkeypatch.setenv(key, "testing")
     monkeypatch.delenv("AWS_PROFILE", raising=False)
     monkeypatch.setenv("AWS_REGION", REGION)
+    monkeypatch.setenv(
+        "DRIFTPILOT_AWS_DEMO_SCOPE", "full"
+    )  # the tests below start in the full scope
+    monkeypatch.setattr(inject_drift, "AWS_TFVARS", tmp_path / "terraform.tfvars")
     monkeypatch.setenv("DRIFTPILOT_AWS_DEMO", "1")
     monkeypatch.delenv("DRIFTPILOT_AWS_DEMO_PUBLIC", raising=False)
 
@@ -162,11 +169,41 @@ def test_refuses_without_the_confirmation_variable(demo, monkeypatch) -> None:
     assert set(flags.values()) == {True}
 
 
-def test_refuses_without_a_region(demo, monkeypatch) -> None:
+def test_region_defaults_to_the_scopes_region_and_other_regions_are_refused(
+    demo, monkeypatch
+) -> None:
     monkeypatch.delenv("AWS_REGION")
     monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
-    with pytest.raises(SystemExit, match="AWS_REGION"):
+    run("inject", 22)  # full scope: ap-south-1 by default
+    assert db(demo)["BackupRetentionPeriod"] == 0
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    with pytest.raises(SystemExit, match="full scope runs in ap-south-1"):
         run("inject", 22)
+    monkeypatch.setenv("AWS_REGION", "eu-west-1")
+    with pytest.raises(SystemExit, match="not eu-west-1"):
+        run("inject", 20)
+
+
+def test_25_versioning_suspended_and_back(demo) -> None:
+    run("inject", 25)
+    assert demo["s3"].get_bucket_versioning(Bucket=BUCKET)["Status"] == "Suspended"
+    run("revert", 25)
+    assert demo["s3"].get_bucket_versioning(Bucket=BUCKET)["Status"] == "Enabled"
+
+
+def encryption(demo) -> list[dict]:
+    config = demo["s3"].get_bucket_encryption(Bucket=BUCKET)["ServerSideEncryptionConfiguration"]
+    return [r["ApplyServerSideEncryptionByDefault"]["SSEAlgorithm"] for r in config["Rules"]]
+
+
+def test_26_default_encryption_removed_and_back(demo) -> None:
+    from botocore.exceptions import ClientError
+
+    run("inject", 26)
+    with pytest.raises(ClientError, match="ServerSideEncryptionConfigurationNotFoundError"):
+        demo["s3"].get_bucket_encryption(Bucket=BUCKET)
+    run("revert", 26)
+    assert encryption(demo) == ["AES256"]
 
 
 def test_refuses_an_untagged_bucket(demo) -> None:
@@ -204,6 +241,118 @@ def test_refuses_an_untagged_database(demo) -> None:
 
 def test_no_demo_resources_means_nothing_happens() -> None:
     with mock_aws():
-        for number in (20, 21, 22, 23, 24):
+        for number in (20, 21, 22, 23, 24, 25, 26):
             with pytest.raises(SystemExit):
                 run("inject", number)
+
+
+# ---------- the "s3" scope: one bucket in us-east-1, no EC2, no RDS ----------
+
+
+@pytest.fixture
+def s3_demo(monkeypatch):
+    monkeypatch.setenv("DRIFTPILOT_AWS_DEMO_SCOPE", "s3")
+    monkeypatch.setenv("AWS_REGION", S3_REGION)
+    with mock_aws():
+        s3 = boto3.client("s3", region_name=S3_REGION)
+        s3.create_bucket(Bucket=BUCKET)  # us-east-1 takes no LocationConstraint
+        s3.put_bucket_tagging(Bucket=BUCKET, Tagging={"TagSet": DEMO})
+        s3.put_public_access_block(
+            Bucket=BUCKET,
+            PublicAccessBlockConfiguration=dict.fromkeys(
+                (
+                    "BlockPublicAcls",
+                    "IgnorePublicAcls",
+                    "BlockPublicPolicy",
+                    "RestrictPublicBuckets",
+                ),
+                True,
+            ),
+        )
+        s3.put_bucket_versioning(Bucket=BUCKET, VersioningConfiguration={"Status": "Enabled"})
+        s3.put_bucket_encryption(
+            Bucket=BUCKET,
+            ServerSideEncryptionConfiguration={
+                "Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
+            },
+        )
+        yield {"s3": s3}
+
+
+def flags(s3_demo) -> set[bool]:
+    config = s3_demo["s3"].get_public_access_block(Bucket=BUCKET)
+    return set(config["PublicAccessBlockConfiguration"].values())
+
+
+def test_s3_scope_defaults_to_us_east_1_without_any_region_variable(s3_demo, monkeypatch) -> None:
+    monkeypatch.delenv("AWS_REGION")
+    monkeypatch.delenv("AWS_DEFAULT_REGION", raising=False)
+    run("inject", 20)
+    assert flags(s3_demo) == {False}
+    run("revert", 20)
+    assert flags(s3_demo) == {True}
+
+
+def test_s3_scope_is_the_default_when_nothing_is_set(s3_demo, monkeypatch) -> None:
+    monkeypatch.delenv("DRIFTPILOT_AWS_DEMO_SCOPE")
+    run("inject", 20)
+    assert flags(s3_demo) == {False}
+
+
+def test_scope_can_be_read_from_terraform_tfvars(s3_demo, monkeypatch) -> None:
+    monkeypatch.delenv("DRIFTPILOT_AWS_DEMO_SCOPE")
+    inject_drift.AWS_TFVARS.write_text('my_ip_cidr = "198.51.100.9/32"\ndemo_scope = "full"\n')
+    with pytest.raises(SystemExit, match="full scope runs in ap-south-1"):
+        run("inject", 20)  # the file says full, but the region is us-east-1
+    assert flags(s3_demo) == {True}
+
+
+def test_s3_scope_runs_the_four_bucket_scenarios_and_reverts_them(s3_demo) -> None:
+    run("inject", 20, 24, 25, 26)
+    assert flags(s3_demo) == {False}
+    tags = {t["Key"]: t["Value"] for t in s3_demo["s3"].get_bucket_tagging(Bucket=BUCKET)["TagSet"]}
+    assert tags["reviewed-by"] == "hand" and tags["demo"] == "driftpilot"
+    assert s3_demo["s3"].get_bucket_versioning(Bucket=BUCKET)["Status"] == "Suspended"
+    with pytest.raises(Exception, match="ServerSideEncryptionConfigurationNotFoundError"):
+        s3_demo["s3"].get_bucket_encryption(Bucket=BUCKET)
+    run("revert", 26, 25, 24, 20)
+    assert flags(s3_demo) == {True}
+    tags = {t["Key"]: t["Value"] for t in s3_demo["s3"].get_bucket_tagging(Bucket=BUCKET)["TagSet"]}
+    assert tags == {"demo": "driftpilot", "team": "platform"}
+    assert s3_demo["s3"].get_bucket_versioning(Bucket=BUCKET)["Status"] == "Enabled"
+    assert encryption(s3_demo) == ["AES256"]
+
+
+@pytest.mark.parametrize("number", [21, 22, 23])
+@pytest.mark.parametrize("action", ["inject", "revert"])
+def test_s3_scope_refuses_the_security_group_and_database_scenarios(
+    s3_demo, number, action
+) -> None:
+    with pytest.raises(SystemExit, match='needs the full demo scope.*"s3" scope'):
+        run(action, number)
+
+
+def test_s3_scope_refuses_another_region_and_never_touches_ec2_or_rds(s3_demo, monkeypatch) -> None:
+    monkeypatch.setenv("AWS_REGION", "ap-south-1")
+    with pytest.raises(SystemExit, match="s3 scope runs in us-east-1, not ap-south-1"):
+        run("inject", 25)
+    assert s3_demo["s3"].get_bucket_versioning(Bucket=BUCKET)["Status"] == "Enabled"
+
+
+def test_unknown_scope_is_refused(s3_demo, monkeypatch) -> None:
+    monkeypatch.setenv("DRIFTPILOT_AWS_DEMO_SCOPE", "everything")
+    with pytest.raises(SystemExit, match="unknown demo scope"):
+        run("inject", 20)
+
+
+@pytest.mark.parametrize("number", [20, 24, 25, 26])
+def test_s3_scope_guards_still_apply(s3_demo, monkeypatch, number) -> None:
+    s3_demo["s3"].put_bucket_tagging(Bucket=BUCKET, Tagging={"TagSet": OTHER})
+    with pytest.raises(SystemExit, match="exactly one bucket"):
+        run("inject", number)
+    monkeypatch.delenv("DRIFTPILOT_AWS_DEMO")
+    with pytest.raises(SystemExit, match="DRIFTPILOT_AWS_DEMO=1"):
+        run("inject", number)
+    assert flags(s3_demo) == {True}
+    assert s3_demo["s3"].get_bucket_versioning(Bucket=BUCKET)["Status"] == "Enabled"
+    assert encryption(s3_demo) == ["AES256"]
