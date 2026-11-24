@@ -31,6 +31,8 @@ CONTROL_TAGS = frozenset(
         "audit-logging",
         "code-review",
         "backup",
+        "data-integrity",  # database constraints and NOT NULL
+        "pii",  # personal data
     }
 )
 ADMIN_PORTS = (22, 3389)
@@ -209,6 +211,47 @@ def _tags_all_mirrors_tags(f: DriftFinding, _: Any, resource: Any) -> bool:
     return isinstance(tags, dict) and key in tags and tags[key] == f.after
 
 
+_PII_SUBSTRINGS = ("email", "phone", "passport", "aadhaar", "aadhar", "birth", "mobile")
+_PII_TOKENS = {"ssn", "dob", "pan", "card", "iban", "sin", "nin", "tin"}
+_NAME_PARTS = re.compile(r"[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])")
+
+
+def _pii_name(f: DriftFinding, _: Any, __: Any) -> bool:
+    """A new database column whose name suggests personal data (email, phone, ssn, card ...)."""
+    if f.resource_type != "pg_column":
+        return False
+    name = f.address.rsplit(".", 1)[-1]
+    tokens = {t.lower() for t in _NAME_PARTS.split(name) if t}
+    return bool(tokens & _PII_TOKENS) or any(w in name.lower() for w in _PII_SUBSTRINGS)
+
+
+def _always_true(expression: Any) -> bool:
+    text = "".join(str(expression or "").lower().split()).strip("()")
+    return text in ("true", "1=1")
+
+
+def _policy_loosened(f: DriftFinding, _: Any, __: Any) -> bool:
+    """A row-level-security policy now lets more rows through than the migrations say.
+
+    New or changed permissive policy that is always true (or open to PUBLIC when it was not), a
+    condition that disappeared, or a restrictive policy made permissive.
+    """
+    after, before = f.after, f.before
+    if f.resource_type != "pg_policy" or not isinstance(after, dict) or f.change_kind == "deleted":
+        return False
+    if not after.get("permissive", True):
+        return False
+    if _always_true(after.get("using")) or _always_true(after.get("with_check")):
+        return not isinstance(before, dict) or not (
+            _always_true(before.get("using")) or _always_true(before.get("with_check"))
+        )
+    if not isinstance(before, dict):
+        return False
+    opened = "public" in after.get("roles", []) and "public" not in before.get("roles", [])
+    dropped_condition = before.get("using") is not None and after.get("using") is None
+    return opened or dropped_condition or not before.get("permissive", True)
+
+
 Predicate = Callable[[DriftFinding, Any, Any], bool]
 PREDICATES: dict[str, Predicate] = {
     "null_to_default": _null_to_default,
@@ -220,6 +263,8 @@ PREDICATES: dict[str, Predicate] = {
     "json_wildcard_principal": _json_wildcard_principal,
     "iam_wildcard": _iam_wildcard,
     "tags_all_mirrors_tags": _tags_all_mirrors_tags,
+    "pii_name": _pii_name,
+    "policy_loosened": _policy_loosened,
 }
 
 

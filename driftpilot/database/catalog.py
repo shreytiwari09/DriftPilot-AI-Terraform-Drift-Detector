@@ -107,8 +107,8 @@ class Column(BaseModel):
 
     def summary(self) -> dict[str, Any]:
         out: dict[str, Any] = {"type": self.type, "nullable": self.nullable}
-        for key in ("default", "generated"):
-            if getattr(self, key) is not None:
+        for key in ("default", "generated", "comment"):
+            if getattr(self, key):
                 out[key] = getattr(self, key)
         if self.identity:
             out["identity"] = self.identity
@@ -216,6 +216,8 @@ class Table(BaseModel):
         }
         if self.rls_enabled:
             out["row_level_security"] = True
+        if self.comment:
+            out["comment"] = self.comment
         return out
 
 

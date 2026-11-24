@@ -6,11 +6,11 @@
 #
 # Predicates: null_to_default, list_reordered, json_equal, decreased,
 #             changed_to: <value>, open_cidr_on_admin_port, json_wildcard_principal, iam_wildcard,
-#             tags_all_mirrors_tags
+#             tags_all_mirrors_tags, pii_name, policy_loosened (the last two are for Postgres)
 #
 # `controls:` (optional, on a rule or a never_soften entry) = DESCRIPTIVE compliance tags shown in issues and the
 # job summary: public-storage, network-exposure, least-privilege, encryption-at-rest, audit-logging, code-review,
-# backup. They are NOT CIS / SOC 2 control numbers: those must be checked against the primary texts first
+# backup, data-integrity (database constraints), pii (personal data). They are NOT CIS / SOC 2 control numbers: those must be checked against the primary texts first
 # (open item for Shrey) before anyone names them here.
 #
 # `never_soften:` (end of file) lists security weakenings that an LLM verdict may never play down:
@@ -416,6 +416,232 @@ rules:
       reason: The instance now has a public IP address and can be reached from the internet.
 
 
+  # ---------- Postgres (database schema drift) ----------
+  # Resource types: pg_table, pg_column, pg_constraint, pg_index, pg_policy, pg_grant, pg_table_rls.
+  # `before` is what the migration files build, `after` is the live database. change_kind `added`
+  # = only the live database has it; `deleted` = the migrations have it but the live database lost it.
+  - id: pg-noise-owner
+    description: Only the table owner differs (scratch databases are owned by another role).
+    match: { type: pg_table, attribute: owner }
+    verdict:
+      is_real_drift: false
+      severity: none
+      category: cosmetic
+      intent: likely_automation
+      recommended_action: none
+      confidence: 0.9
+      reason: Only the owner role differs; the migration run uses another role than the live database.
+
+  - id: pg-noise-comment
+    description: Only a comment differs.
+    match: { type: "pg_*", attribute: comment }
+    verdict:
+      is_real_drift: false
+      severity: none
+      category: cosmetic
+      intent: likely_automation
+      recommended_action: none
+      confidence: 0.9
+      reason: Only a comment on the object differs; the schema behaves the same.
+
+  - id: pg-rls-disabled
+    description: Row-level security was switched off on a table.
+    controls: [least-privilege]
+    match: { type: pg_table_rls, attribute: row_level_security, change_kind: modified }
+    when: { changed_to: false }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: Row-level security is off, so every role with table access can read and change every row.
+
+  - id: pg-policy-dropped
+    description: A row-level security policy is missing from the live database.
+    controls: [least-privilege]
+    match: { type: pg_policy, change_kind: deleted }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: A row-level security policy was dropped, so rows it protected are no longer restricted.
+
+  - id: pg-policy-loosened
+    description: A row-level security policy now lets more rows through.
+    controls: [least-privilege]
+    match: { type: pg_policy }
+    when: policy_loosened
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: A row-level security policy was added or changed so that it lets more rows through (for example USING true).
+
+  - id: pg-grant-to-public
+    description: A privilege was granted to PUBLIC (every role).
+    controls: [least-privilege]
+    match: { type: pg_grant, attribute: "grant:PUBLIC:*", change_kind: added }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: A privilege on the table was granted to PUBLIC, so every database role has it.
+
+  - id: pg-rls-force-off
+    description: FORCE ROW LEVEL SECURITY was switched off, so the table owner bypasses the policies.
+    controls: [least-privilege]
+    match: { type: pg_table_rls, attribute: force_row_level_security, change_kind: modified }
+    when: { changed_to: false }
+    verdict:
+      is_real_drift: true
+      severity: high
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.85
+      reason: Row-level security is no longer forced, so the table owner can bypass its policies.
+
+  - id: pg-rls-enabled
+    description: Row-level security is on in the live database but the migrations do not turn it on.
+    controls: [least-privilege]
+    match: { type: pg_table_rls, attribute: row_level_security, change_kind: modified }
+    when: { changed_to: true }
+    verdict:
+      is_real_drift: true
+      severity: medium
+      category: security
+      intent: likely_hotfix
+      recommended_action: codify
+      confidence: 0.8
+      reason: Row-level security was switched on by hand; it is stricter, so keep it and add it to the migrations.
+
+  - id: pg-not-null-dropped
+    description: A NOT NULL rule was removed from a column.
+    controls: [data-integrity]
+    match: { type: pg_column, attribute: nullable, change_kind: modified }
+    when: { changed_to: true }
+    verdict:
+      is_real_drift: true
+      severity: high
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.85
+      reason: The column accepts NULL again, so rows can be saved without a value the application relies on.
+
+  - id: pg-constraint-dropped
+    description: A primary key, foreign key, unique or check constraint is missing from the live database.
+    controls: [data-integrity]
+    match: { type: pg_constraint, change_kind: deleted }
+    verdict:
+      is_real_drift: true
+      severity: high
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: A constraint was dropped, so the database no longer stops duplicate, orphaned or invalid rows.
+
+  - id: pg-pii-column-added
+    description: A column whose name suggests personal data exists only in the live database.
+    controls: [pii]
+    match: { type: pg_column, change_kind: added }
+    when: pii_name
+    verdict:
+      is_real_drift: true
+      severity: high
+      category: security
+      intent: unknown
+      recommended_action: investigate
+      confidence: 0.85
+      reason: A column that looks like personal data was added by hand, with no migration, review or access plan.
+
+  - id: pg-grant-added
+    description: A privilege was granted to a role that the migrations do not grant.
+    controls: [least-privilege]
+    match: { type: pg_grant, change_kind: added }
+    verdict:
+      is_real_drift: true
+      severity: medium
+      category: security
+      intent: unknown
+      recommended_action: investigate
+      confidence: 0.8
+      reason: A role has a privilege on the table that no migration grants.
+
+  - id: pg-grant-revoked
+    description: A privilege the migrations grant is missing in the live database.
+    controls: [least-privilege]
+    match: { type: pg_grant, change_kind: deleted }
+    verdict:
+      is_real_drift: true
+      severity: medium
+      category: availability
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.8
+      reason: A role lost a privilege the migrations give it, so its queries can start failing.
+
+  - id: pg-extra-table
+    description: A table exists only in the live database.
+    match: { type: pg_table, change_kind: added }
+    verdict:
+      is_real_drift: true
+      severity: medium
+      category: availability
+      intent: unknown
+      recommended_action: codify
+      confidence: 0.75
+      reason: The live database has a table no migration creates; add a migration so a rebuild keeps it.
+
+  - id: pg-extra-column
+    description: A column exists only in the live database.
+    match: { type: pg_column, change_kind: added }
+    verdict:
+      is_real_drift: true
+      severity: medium
+      category: availability
+      intent: likely_hotfix
+      recommended_action: codify
+      confidence: 0.75
+      reason: The live database has a column no migration adds; add a migration so a rebuild keeps it.
+
+  - id: pg-index-dropped
+    description: An index from the migrations is missing in the live database.
+    match: { type: pg_index, change_kind: deleted }
+    verdict:
+      is_real_drift: true
+      severity: medium
+      category: availability
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.8
+      reason: An index was dropped, so queries that used it can become slow.
+
+  - id: pg-column-type-changed
+    description: A column has another type than the migrations give it.
+    match: { type: pg_column, attribute: type, change_kind: modified }
+    verdict:
+      is_real_drift: true
+      severity: medium
+      category: availability
+      intent: unknown
+      recommended_action: investigate
+      confidence: 0.8
+      reason: The column type differs from the migrations; a person should decide which one is right.
+
+
 # Security weakenings the LLM may not soften (guardrail, see triage/policy.py). Each entry: match (type,
 # attribute, change_kind) + optional `when` predicate + the lowest severity the verdict may have.
 never_soften:
@@ -504,5 +730,16 @@ never_soften:
       floor_severity: critical, reason: CloudTrail logging was turned off,
       controls: [audit-logging] }
 
-  # ---------- Postgres (added in the database phase) ----------
-  # Row-level security off, a policy dropped, a grant to PUBLIC: types pg_table_rls, pg_policy, pg_grant.
+  # ---------- Postgres ----------
+  - { type: pg_table_rls, attribute: row_level_security, change_kind: modified, when: { changed_to: false },
+      floor_severity: critical, reason: row-level security was switched off,
+      controls: [least-privilege] }
+  - { type: pg_policy, change_kind: deleted, floor_severity: critical,
+      reason: a row-level security policy was dropped,
+      controls: [least-privilege] }
+  - { type: pg_policy, when: policy_loosened, floor_severity: critical,
+      reason: a row-level security policy was loosened,
+      controls: [least-privilege] }
+  - { type: pg_grant, attribute: "grant:PUBLIC:*", change_kind: added, floor_severity: critical,
+      reason: a privilege was granted to PUBLIC,
+      controls: [least-privilege] }
