@@ -359,6 +359,20 @@ rules:
       confidence: 0.9
       reason: The bucket encryption configuration was deleted outside Terraform.
 
+  - id: aws-s3-versioning-suspended
+    description: Versioning on an S3 bucket was suspended.
+    controls: [backup]
+    match: { type: aws_s3_bucket_versioning, attribute: "versioning_configuration*status", change_kind: modified }
+    when: { changed_to: Suspended }
+    verdict:
+      is_real_drift: true
+      severity: high
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: Bucket versioning is suspended, so overwritten or deleted objects can no longer be recovered.
+
   - id: aws-cloudtrail-logging-off
     description: CloudTrail logging was stopped.
     controls: [audit-logging]

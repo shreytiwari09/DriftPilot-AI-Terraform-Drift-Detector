@@ -129,6 +129,22 @@ def test_s3_encryption_configuration_removed_is_critical() -> None:
     assert (v.severity, v.controls) == ("critical", ["encryption-at-rest"])
 
 
+def test_s3_versioning_suspended_is_high() -> None:
+    attr = "versioning_configuration[0].status"
+    before = {"bucket": "b", "versioning_configuration": [{"status": "Enabled"}]}
+    after = {"bucket": "b", "versioning_configuration": [{"status": "Suspended"}]}
+    v = decide("aws_s3_bucket_versioning", before, after)[attr]
+    assert (v.severity, v.recommended_action, v.source) == ("high", "revert", "rule")
+    assert v.controls == ["backup"]
+
+
+def test_s3_versioning_turned_on_is_not_a_rule() -> None:
+    attr = "versioning_configuration[0].status"
+    before = {"bucket": "b", "versioning_configuration": [{"status": "Suspended"}]}
+    after = {"bucket": "b", "versioning_configuration": [{"status": "Enabled"}]}
+    assert decide("aws_s3_bucket_versioning", before, after)[attr] is None
+
+
 def test_backup_retention_decreased_is_high() -> None:
     v = decide("aws_db_instance", {"backup_retention_period": 7}, {"backup_retention_period": 1})[
         "backup_retention_period"
