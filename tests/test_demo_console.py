@@ -67,3 +67,28 @@ def test_collecting_output_keeps_proposals() -> None:
         ("issue", False),
     ]
     assert "No changes." in out.proposals[0].body
+
+
+def test_database_tab_scans_and_proposes_fixes_without_a_database() -> None:
+    """The tab's code on replayed catalogs: SQL for a revert, a migration for a codify."""
+    import sys
+
+    sys.path.insert(0, str(Path(__file__).parent))
+    from pg_shop import edit, shop
+
+    from driftpilot.database.catalog import Column
+    from driftpilot.database.scan import Catalogs
+
+    live = edit(shop(), "orders", lambda t: setattr(t, "rls_enabled", False))
+    live = edit(live, "users", lambda t: t.columns.append(Column(name="nickname", type="text")))
+    with patch("driftpilot.database.scan.load_catalogs", return_value=Catalogs(shop(), live)):
+        result, ctx = backend.db_scan(use_llm=False)
+    assert {f.address for f in result.real_findings} == {
+        "postgres.public.orders", "postgres.public.users.nickname",
+    }  # fmt: skip
+    proposals = backend.db_fix(result, ctx)
+    revert = next(p for p in proposals if p.action == "revert")
+    assert "ENABLE ROW LEVEL SECURITY" in revert.body and not revert.verified
+    codify = next(p for p in proposals if p.action == "codify")
+    assert list(codify.files) == ["migrations/0004_driftpilot_public_users_nickname.sql"]
+    assert backend.change_text(result.real_findings[0])

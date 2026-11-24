@@ -21,6 +21,14 @@ ROOT = Path(__file__).resolve().parents[2]
 ORG = "driftpilot-demo"
 INFRA = f"{ORG}/infra"
 DOCKER_DIR = ROOT / "demo" / "docker"
+POSTGRES_DIR = ROOT / "demo" / "postgres"
+# Local demo logins of demo/postgres (a container on this laptop): not secrets.
+POSTGRES_URLS = {
+    "DRIFTPILOT_DB_URL": "postgresql://driftpilot_ro:driftpilot_ro@localhost:5433/appdb",
+    "DRIFTPILOT_SCRATCH_DB_URL": (
+        "postgresql://driftpilot_scratch:driftpilot_scratch@localhost:5433/postgres"
+    ),
+}
 DASHBOARD = "https://driftpilot-demo.github.io/drift-dashboard/"
 SIMULATED_DASHBOARD = DASHBOARD + "simulated/"
 KEYCHAIN_SERVICE = "driftpilot-demo-pat"
@@ -47,6 +55,7 @@ def load_credentials() -> dict[str, bool]:
         "Gemini key": bool(os.environ.get("GEMINI_API_KEY")),
         "gh login": _gh_ok(),
         "Docker": _docker_ok(),
+        "Postgres demo (demo/postgres)": postgres_up(),
     }
 
 
@@ -307,3 +316,68 @@ def unified_diff(path: str, new: str) -> str:
     return "\n".join(
         difflib.unified_diff(old, new.splitlines(), f"a/{path}", f"b/{path}", lineterm="", n=1)
     )
+
+
+# ---------- local Postgres demo (database schema drift) ----------
+
+
+def change_text(finding) -> str:
+    from driftpilot.report import change_text as describe
+
+    return describe(finding)
+
+
+def db_inject(scenario: int) -> str:
+    """Scenarios 15-19 of scripts/inject_drift.py (they only connect to localhost)."""
+    return inject(scenario)
+
+
+def db_revert(scenario: int) -> str:
+    return revert(scenario)
+
+
+def db_scan(use_llm: bool = True):
+    """Scan demo/postgres: (the ScanResult, what `db_fix` needs). Raises DatabaseError."""
+    from driftpilot.config import load_config
+    from driftpilot.database.remediate import DatabaseContext
+    from driftpilot.database.scan import load_catalogs, scratch_url
+    from driftpilot.scan import run_database_scan
+    from driftpilot.triage.llm import build_llm
+
+    for name, value in POSTGRES_URLS.items():
+        os.environ.setdefault(name, value)
+    config = load_config(None, POSTGRES_DIR)
+    catalogs = load_catalogs(POSTGRES_DIR, config)
+    llm = build_llm(config.llm) if use_llm else None
+    result = run_database_scan(POSTGRES_DIR, config, llm, catalogs=catalogs)
+    ctx = DatabaseContext(
+        working_dir=POSTGRES_DIR,
+        config=config.model_copy(update={"mode": "open-prs"}),
+        live=catalogs.live.filtered(config.database.ignore),
+        scratch_url=scratch_url(config),
+        baseline_ids={f.id for f in result.real_findings},
+    )
+    return result, ctx
+
+
+def db_fix(result, ctx) -> list[Proposal]:
+    """What DriftPilot would open for the scan: SQL issues and verified migration PRs."""
+    from driftpilot.database.remediate import database_patch
+    from driftpilot.remediate.runner import run_remediations
+
+    output = CollectingOutput()
+    run_remediations(
+        result, ctx.config, None, POSTGRES_DIR, output, db_patch=lambda i: database_patch(i, ctx)
+    )
+    return output.proposals
+
+
+def postgres_up() -> bool:
+    """Is the demo database container answering on localhost:5433?"""
+    import socket
+
+    try:
+        with socket.create_connection(("127.0.0.1", 5433), timeout=1):
+            return True
+    except OSError:
+        return False

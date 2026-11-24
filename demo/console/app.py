@@ -5,6 +5,7 @@
 Not part of the product: DriftPilot itself runs as a GitHub Action. This page just drives the demo.
 """
 
+import contextlib
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -91,12 +92,13 @@ def show_items(since: datetime) -> None:
         st.info("No new DriftPilot issue or pull request yet.")
 
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(
+tab1, tab2, tab3, tab4, tab_db, tab5 = st.tabs(
     [
         "1 · Dangerous change",
         "2 · Good change",
         "3 · On my laptop",
         "4 · History",
+        "5 · Database",
         "Reset",
     ]
 )
@@ -226,13 +228,94 @@ with tab4:
     )
     st.iframe(backend.SIMULATED_DASHBOARD, height=900)
 
+# ---------- 5: database schema drift (local Postgres) ----------
+DB_SCENARIOS = {
+    15: "🔓 Switch off row-level security on orders",
+    16: "✂️ Drop NOT NULL on users.email",
+    17: "🪪 Add an ssn column to users",
+    18: "🌍 GRANT SELECT ON orders TO PUBLIC",
+    19: "🆕 Add a harmless nickname column",
+}
+with tab_db:
+    st.subheader("Database drift: migration files against a live Postgres")
+    st.markdown(
+        "The team's **migration files** say how the database should look. Someone changes the live "
+        "database by hand. DriftPilot builds the schema the migrations describe in a throw-away "
+        "database, reads the live one (read-only), and judges every difference. Needs "
+        "`docker compose up -d` in `demo/postgres`."
+    )
+    cols = st.columns(len(DB_SCENARIOS))
+    for col, (number, label) in zip(cols, DB_SCENARIOS.items(), strict=True):
+        if col.button(label, key=f"db{number}", width="stretch"):
+            try:
+                st.success(f"Changed on the live database: {backend.db_inject(number)}.")
+            except Exception as e:
+                st.error(f"Could not change the demo database: {e}")
+    c1, c2, c3 = st.columns(3)
+    if c1.button("🔍 Scan the database", type="primary", width="stretch"):
+        try:
+            with st.spinner("Building the expected schema, reading the live one, judging…"):
+                st.session_state["db_scan"] = backend.db_scan()
+                st.session_state.pop("db_fix", None)
+        except Exception as e:
+            st.error(f"Scan failed: {e}")
+    if c2.button("🛠 Propose fixes", width="stretch"):
+        try:
+            scan_state = st.session_state.get("db_scan") or backend.db_scan()
+            st.session_state["db_scan"] = scan_state
+            with st.spinner("Writing SQL and testing a migration in a scratch database…"):
+                st.session_state["db_fix"] = backend.db_fix(*scan_state)
+        except Exception as e:
+            st.error(f"Could not propose fixes: {e}")
+    if c3.button("↩︎ Undo all database changes", width="stretch"):
+        for number in DB_SCENARIOS:
+            with contextlib.suppress(Exception):  # nothing to undo, or the database is not running
+                backend.db_revert(number)
+        st.session_state.pop("db_scan", None)
+        st.session_state.pop("db_fix", None)
+        st.success("The demo database is back to what the migrations say.")
+
+    if (scanned := st.session_state.get("db_scan")) is not None:
+        db_result = scanned[0]
+        rows = []
+        for f in db_result.real_findings:
+            v = db_result.verdicts.get(f.id)
+            rows.append(
+                {
+                    "Severity": v.severity if v else "needs triage",
+                    "Object": f.address.removeprefix("postgres."),
+                    "Setting": f.attribute_path or "—",
+                    "Change": backend.change_text(f),
+                    "Action": v.recommended_action if v else "—",
+                    "Decided by": (v.rule_id or v.source) if v else "—",
+                    "Why": v.reason if v else "",
+                }
+            )
+        if rows:
+            st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch")
+        else:
+            st.success("No drift detected: the live database matches the migrations.")
+        hidden = len(db_result.findings) - len(db_result.real_findings)
+        if hidden:
+            st.caption(f"{hidden} noise finding(s) filtered by the rules (owner, comments).")
+    for p in st.session_state.get("db_fix", []):
+        with st.container(border=True):
+            label = "✅ proven in a scratch database" if p.verified else "not verified"
+            st.markdown(f"#### Would open a {p.kind}: `{p.address}` ({p.action}) — {label}")
+            with st.expander("The issue or pull request text"):
+                st.markdown(p.body)
+            for path, content in p.files.items():
+                st.code(f"-- {path}\n{content}", language="sql")
+            if p.proof and p.verified:
+                st.success(p.proof)
+
 # ---------- reset ----------
 with tab5:
     st.subheader("Put everything back after the demo")
     if st.button("Undo all changes and close demo issues/PRs"):
         with st.spinner("Restoring…"):
             problems = []
-            for scenario in (2, 5, 11):
+            for scenario in (2, 5, 11, 15, 16, 17, 18, 19):
                 try:
                     backend.revert(scenario)
                 except Exception as e:  # e.g. undoing something that was never changed
