@@ -21,6 +21,18 @@ from driftpilot.models import (
     Verdict,
 )
 
+# Descriptive tags, not CIS/SOC 2 control numbers (those must be checked against the primary texts).
+CONTROL_TAGS = frozenset(
+    {
+        "public-storage",
+        "network-exposure",
+        "least-privilege",
+        "encryption-at-rest",
+        "audit-logging",
+        "code-review",
+        "backup",
+    }
+)
 ADMIN_PORTS = (22, 3389)
 OPEN_CIDRS = {"0.0.0.0/0", "::/0"}
 
@@ -50,6 +62,7 @@ class NeverSoften(BaseModel):
     when: str | dict[str, Any] | None = None
     floor_severity: Severity
     reason: str
+    controls: list[str] = []
 
 
 class Rule(BaseModel):
@@ -57,6 +70,7 @@ class Rule(BaseModel):
     description: str = ""
     match: RuleMatch = RuleMatch()
     when: str | dict[str, Any] | None = None
+    controls: list[str] = []  # descriptive compliance tags shown in the issue and the summary
     verdict: RuleVerdict
 
 
@@ -182,6 +196,19 @@ def _iam_wildcard(f: DriftFinding, _: Any, __: Any) -> bool:
     return _any_wildcard(f.after) and not _any_wildcard(f.before)
 
 
+def _tags_all_mirrors_tags(f: DriftFinding, _: Any, resource: Any) -> bool:
+    """`tags_all.K` changed the same way as `tags.K`: the provider copies tags into tags_all.
+
+    A key that is only in `tags_all` comes from the provider's `default_tags`; that stays real.
+    """
+    path = f.attribute_path or ""
+    if not path.startswith("tags_all.") or not isinstance(resource, dict):
+        return False
+    tags = resource.get("tags")
+    key = path.removeprefix("tags_all.")
+    return isinstance(tags, dict) and key in tags and tags[key] == f.after
+
+
 Predicate = Callable[[DriftFinding, Any, Any], bool]
 PREDICATES: dict[str, Predicate] = {
     "null_to_default": _null_to_default,
@@ -192,6 +219,7 @@ PREDICATES: dict[str, Predicate] = {
     "open_cidr_on_admin_port": _open_cidr_on_admin_port,
     "json_wildcard_principal": _json_wildcard_principal,
     "iam_wildcard": _iam_wildcard,
+    "tags_all_mirrors_tags": _tags_all_mirrors_tags,
 }
 
 
@@ -224,10 +252,19 @@ def needs_replace_to_revert(finding: DriftFinding, path: Path | None = None) -> 
     )
 
 
+def _check_controls(controls: list[str]) -> None:
+    unknown = set(controls) - CONTROL_TAGS
+    if unknown:
+        raise ValueError(
+            f"unknown control tag: {sorted(unknown)} (allowed: {sorted(CONTROL_TAGS)})"
+        )
+
+
 def load_rules(path: Path | None = None) -> list[Rule]:
     rules = [Rule.model_validate(r) for r in _rule_pack(path)["rules"]]
     for rule in rules:
         _predicate(rule.when)  # fail fast on typos
+        _check_controls(rule.controls)
     return rules
 
 
@@ -258,6 +295,7 @@ def load_never_soften(path: Path | None = None) -> list[NeverSoften]:
     entries = [NeverSoften.model_validate(e) for e in _rule_pack(path).get("never_soften") or []]
     for entry in entries:
         _predicate(entry.when)  # fail fast on typos
+        _check_controls(entry.controls)
     return entries
 
 
@@ -285,6 +323,7 @@ def apply_rules(
                     finding_id=finding.id,
                     source="rule",
                     rule_id=rule.id,
+                    controls=rule.controls,
                     **rule.verdict.model_dump(),
                 )
                 break

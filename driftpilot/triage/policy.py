@@ -16,6 +16,7 @@ from driftpilot.models import (
     UnmanagedFinding,
     Verdict,
 )
+from driftpilot.triage.llm_triage import finding_texts
 from driftpilot.triage.rules import NeverSoften, glob_match, load_never_soften, never_soften_for
 
 PR_ACTIONS = {"codify", "ignore_changes", "import"}
@@ -64,6 +65,8 @@ def _never_soften(
     entry = never_soften_for(f, _never_soften_list(), resource)
     if entry is None or v.source != "llm":
         return v
+    controls = [*v.controls, *(c for c in entry.controls if c not in v.controls)]
+    v = v.model_copy(update={"controls": controls})
     floor = entry.floor_severity
     soft = (
         not v.is_real_drift
@@ -89,7 +92,7 @@ def _signals_by_address(findings: list[DriftFinding]) -> dict[str, list[str]]:
     one change can steer its verdict on a sibling change."""
     out: dict[str, list[str]] = {}
     for f in findings:
-        for name in injection_signals([f.address, f.attribute_path, f.before, f.after]):
+        for name in injection_signals(finding_texts(f)):
             if name not in out.setdefault(f.address, []):
                 out[f.address].append(name)
     return out
@@ -175,7 +178,15 @@ def apply_policy(
         if u.id in out:
             continue
         v = unmanaged_verdict(u)
-        if guard and (signals := injection_signals([u.name, u.resource_kind])):
+        if guard and (
+            signals := injection_signals(
+                [
+                    u.name,
+                    u.resource_kind,
+                    u.change_context.model_dump() if u.change_context else None,
+                ]
+            )
+        ):
             events.append(
                 GuardrailEvent(kind="suspicious-input", finding_id=u.id, detail=", ".join(signals))
             )

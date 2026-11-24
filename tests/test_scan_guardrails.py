@@ -38,9 +38,10 @@ def write_plan(tmp_path: Path, type_: str, before: dict, after: dict) -> Path:
 
 def test_scan_records_audit_and_overrides_a_softened_security_change(tmp_path) -> None:
     plan = write_plan(
-        tmp_path, "aws_db_instance", {"storage_encrypted": True}, {"storage_encrypted": False}
-    )
-    llm = guarded(FakeLLM([answer("storage_encrypted")]), Config().limits)
+        tmp_path, "github_branch_protection", {"allows_force_pushes": False},
+        {"allows_force_pushes": True},
+    )  # fmt: skip
+    llm = guarded(FakeLLM([answer("allows_force_pushes")]), Config().limits)
     result = run_scan(tmp_path, Config(), plan_json=plan, llm=llm)
     [v] = result.verdicts.values()
     assert (v.is_real_drift, v.severity, v.recommended_action) == (True, "critical", "revert")
@@ -52,10 +53,11 @@ def test_scan_records_audit_and_overrides_a_softened_security_change(tmp_path) -
 
 def test_scan_without_guardrails_trusts_the_llm(tmp_path) -> None:
     plan = write_plan(
-        tmp_path, "aws_db_instance", {"storage_encrypted": True}, {"storage_encrypted": False}
-    )
+        tmp_path, "github_branch_protection", {"allows_force_pushes": False},
+        {"allows_force_pushes": True},
+    )  # fmt: skip
     config = Config.model_validate({"guardrails": {"enabled": False}})
-    llm = guarded(FakeLLM([answer("storage_encrypted")]), config.limits)
+    llm = guarded(FakeLLM([answer("allows_force_pushes")]), config.limits)
     result = run_scan(tmp_path, config, plan_json=plan, llm=llm)
     [v] = result.verdicts.values()
     assert v.is_real_drift is False and result.guardrail_events == []

@@ -12,6 +12,17 @@ Intent = Literal["likely_hotfix", "likely_accidental", "likely_automation", "unk
 Action = Literal["revert", "codify", "ignore_changes", "import", "recreate", "investigate", "none"]
 
 
+class ChangeContext(BaseModel):
+    """Who changed a resource, from a cloud audit event (CloudTrail). All text is sanitised."""
+
+    actor: str | None = None  # e.g. "user/alice" or "assumed-role/Admin/alice" (no account ID)
+    actor_type: str | None = None  # IAMUser, AssumedRole, Root, AWSService ...
+    event_name: str
+    event_source: str | None = None
+    event_time: str | None = None
+    request: dict[str, Any] = {}  # the call's request parameters, cleaned and trimmed
+
+
 class DriftFinding(BaseModel):
     """One changed attribute (or one deleted resource) found by a refresh-only plan."""
 
@@ -26,6 +37,7 @@ class DriftFinding(BaseModel):
     before: Any  # redacted
     after: Any  # redacted
     sensitive: bool = False
+    change_context: ChangeContext | None = None  # who changed it, when a cloud event was given
 
 
 class ScannedResource(BaseModel):
@@ -49,6 +61,7 @@ class UnmanagedFinding(BaseModel):
     resource_id: str
     name: str
     created_at: datetime | None = None
+    change_context: ChangeContext | None = None
 
 
 class Verdict(BaseModel):
@@ -66,6 +79,7 @@ class Verdict(BaseModel):
     guardrails: list[
         str
     ] = []  # e.g. "never-soften", "suspicious-input": why a guardrail changed it
+    controls: list[str] = []  # descriptive compliance tags, e.g. "public-storage"
 
 
 class RemediationResult(BaseModel):

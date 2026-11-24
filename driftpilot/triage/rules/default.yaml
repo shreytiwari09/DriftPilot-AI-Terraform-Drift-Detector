@@ -5,7 +5,13 @@
 # First matching rule wins, so noise rules come first. Findings no rule matches go to LLM triage.
 #
 # Predicates: null_to_default, list_reordered, json_equal, decreased,
-#             changed_to: <value>, open_cidr_on_admin_port, json_wildcard_principal, iam_wildcard
+#             changed_to: <value>, open_cidr_on_admin_port, json_wildcard_principal, iam_wildcard,
+#             tags_all_mirrors_tags
+#
+# `controls:` (optional, on a rule or a never_soften entry) = DESCRIPTIVE compliance tags shown in issues and the
+# job summary: public-storage, network-exposure, least-privilege, encryption-at-rest, audit-logging, code-review,
+# backup. They are NOT CIS / SOC 2 control numbers: those must be checked against the primary texts first
+# (open item for Shrey) before anyone names them here.
 #
 # `never_soften:` (end of file) lists security weakenings that an LLM verdict may never play down:
 # if the LLM calls one of them "not real", lower than `floor_severity`, or "codify"/"ignore", the policy
@@ -83,9 +89,39 @@ rules:
       confidence: 0.95
       reason: The JSON document is unchanged apart from formatting or key order.
 
+  # AWS provider behaviour (checked against the provider's resource docs): `tags_all` is "tags assigned to the
+  # resource, including those inherited from the provider default_tags", so a tag change shows up twice.
+  - id: noise-aws-tags-all-mirror
+    description: tags_all changed exactly like tags (the provider copies tags into tags_all).
+    match: { type: "aws_*", attribute: "tags_all*", change_kind: modified }
+    when: tags_all_mirrors_tags
+    verdict:
+      is_real_drift: false
+      severity: none
+      category: cosmetic
+      intent: likely_automation
+      recommended_action: none
+      confidence: 0.95
+      reason: tags_all repeats the change already reported on tags; the provider copies tags into it.
+
+  # aws_db_instance docs: latest_restorable_time is "the latest time to which a database can be restored with
+  # point-in-time restore", so it moves forward on every refresh while backups run.
+  - id: noise-aws-rds-latest-restorable-time
+    description: RDS point-in-time-restore timestamp advances by itself.
+    match: { type: aws_db_instance, attribute: latest_restorable_time }
+    verdict:
+      is_real_drift: false
+      severity: none
+      category: cosmetic
+      intent: likely_automation
+      recommended_action: none
+      confidence: 0.99
+      reason: The restorable-time stamp advances continuously while backups run; it is not a setting.
+
   # ---------- Critical / high: real, dangerous drift ----------
   - id: github-branch-protection-deleted
     description: Branch protection removed outside Terraform.
+    controls: [code-review]
     match: { type: "github_branch_protection*", change_kind: deleted }
     verdict:
       is_real_drift: true
@@ -98,6 +134,7 @@ rules:
 
   - id: github-required-approvals-reduced
     description: Fewer required pull request approvals than the code says.
+    controls: [code-review]
     match: { type: "github_branch_protection*", attribute: "*required_approving_review_count" }
     when: decreased
     verdict:
@@ -113,6 +150,7 @@ rules:
   # Added after the second-repo test: the classic-protection rules above don't match them.
   - id: github-ruleset-deleted
     description: A repository ruleset removed outside Terraform.
+    controls: [code-review]
     match: { type: github_repository_ruleset, change_kind: deleted }
     verdict:
       is_real_drift: true
@@ -125,6 +163,7 @@ rules:
 
   - id: github-ruleset-approvals-reduced
     description: Fewer required pull request approvals in a ruleset.
+    controls: [code-review]
     match: { type: github_repository_ruleset, attribute: "*required_approving_review_count" }
     when: decreased
     verdict:
@@ -138,6 +177,7 @@ rules:
 
   - id: github-ruleset-deletion-allowed
     description: Ruleset no longer blocks deleting the branch.
+    controls: [code-review]
     match: { type: github_repository_ruleset, attribute: "rules*.deletion" }
     when: { changed_to: false }
     verdict:
@@ -151,6 +191,7 @@ rules:
 
   - id: github-ruleset-force-push-allowed
     description: Ruleset no longer blocks force pushes.
+    controls: [code-review]
     match: { type: github_repository_ruleset, attribute: "rules*.non_fast_forward" }
     when: { changed_to: false }
     verdict:
@@ -164,6 +205,7 @@ rules:
 
   - id: github-ruleset-disabled
     description: Ruleset switched off.
+    controls: [code-review]
     match: { type: github_repository_ruleset, attribute: enforcement }
     when: { changed_to: disabled }
     verdict:
@@ -177,6 +219,7 @@ rules:
 
   - id: github-ruleset-evaluate-only
     description: Ruleset switched to report-only.
+    controls: [code-review]
     match: { type: github_repository_ruleset, attribute: enforcement }
     when: { changed_to: evaluate }
     verdict:
@@ -191,6 +234,7 @@ rules:
   # SPEC §4.4 lists this under critical rules; the §7 scenario table (used as eval labels) says high.
   - id: github-team-permission-admin
     description: A team was given admin on a repository.
+    controls: [least-privilege]
     match: { type: github_team_repository, attribute: permission }
     when: { changed_to: admin }
     verdict:
@@ -204,6 +248,7 @@ rules:
 
   - id: open-cidr-on-admin-port
     description: SSH (22) or RDP (3389) opened to the whole internet.
+    controls: [network-exposure]
     match: { type: "aws_*security_group*", attribute: "*" }
     when: open_cidr_on_admin_port
     verdict:
@@ -216,64 +261,248 @@ rules:
       reason: An admin port (SSH or RDP) is now open to 0.0.0.0/0, the whole internet.
 
 
+  # ---------- AWS ----------
+  - id: aws-s3-public-access-block-off
+    description: An S3 public access block flag was switched off.
+    controls: [public-storage]
+    match: { type: "aws_s3_*public_access_block", attribute: "*public*", change_kind: modified }
+    when: { changed_to: false }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: An S3 public access block setting was turned off, so a bucket can be made public by a policy or ACL.
+
+  - id: aws-s3-bucket-policy-wildcard-principal
+    description: A bucket policy now lets any principal in.
+    controls: [public-storage, least-privilege]
+    match: { type: aws_s3_bucket_policy, attribute: policy }
+    when: json_wildcard_principal
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: The bucket policy now allows any principal ("*"), which can make the bucket public.
+
+  - id: aws-iam-policy-wildcard
+    description: An IAM policy now allows a wildcard action or resource.
+    controls: [least-privilege]
+    match: { type: "aws_iam_*policy", attribute: policy }
+    when: iam_wildcard
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: The IAM policy now allows Action "*" or Resource "*", far more access than a least-privilege policy.
+
+  - id: aws-publicly-accessible-on
+    description: A database was made reachable from the internet.
+    controls: [network-exposure]
+    match: { type: "aws_*", attribute: publicly_accessible, change_kind: modified }
+    when: { changed_to: true }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: The resource was made publicly accessible, so it can be reached from the internet.
+
+  - id: aws-storage-encryption-off
+    description: Storage encryption was turned off on a database or cluster.
+    controls: [encryption-at-rest]
+    match: { type: "aws_*", attribute: storage_encrypted, change_kind: modified }
+    when: { changed_to: false }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: Storage encryption is now off, so data at rest is no longer encrypted.
+
+  - id: aws-ebs-encryption-off
+    description: An EBS volume is no longer encrypted.
+    controls: [encryption-at-rest]
+    match: { type: aws_ebs_volume, attribute: encrypted, change_kind: modified }
+    when: { changed_to: false }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: The volume is no longer encrypted, so data at rest is unprotected.
+
+  - id: aws-s3-encryption-config-deleted
+    description: A bucket encryption configuration was removed.
+    controls: [encryption-at-rest]
+    match: { type: aws_s3_bucket_server_side_encryption_configuration, change_kind: deleted }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: The bucket encryption configuration was deleted outside Terraform.
+
+  - id: aws-cloudtrail-logging-off
+    description: CloudTrail logging was stopped.
+    controls: [audit-logging]
+    match: { type: aws_cloudtrail, attribute: enable_logging, change_kind: modified }
+    when: { changed_to: false }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: CloudTrail logging was turned off, so API activity is no longer recorded.
+
+  - id: aws-backup-retention-decreased
+    description: Backups are kept for fewer days than the code says.
+    controls: [backup]
+    match: { type: "aws_*", attribute: backup_retention_period, change_kind: modified }
+    when: decreased
+    verdict:
+      is_real_drift: true
+      severity: high
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: The backup retention period was lowered, so there are fewer restore points.
+
+  - id: aws-deletion-protection-off
+    description: Deletion protection was switched off.
+    controls: [backup]
+    match: { type: "aws_*", attribute: deletion_protection, change_kind: modified }
+    when: { changed_to: false }
+    verdict:
+      is_real_drift: true
+      severity: high
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: Deletion protection is off, so the database can be deleted by one call.
+
+  - id: aws-ec2-public-ip
+    description: An EC2 instance gets a public IP address.
+    controls: [network-exposure]
+    match: { type: aws_instance, attribute: associate_public_ip_address, change_kind: modified }
+    when: { changed_to: true }
+    verdict:
+      is_real_drift: true
+      severity: high
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.85
+      reason: The instance now has a public IP address and can be reached from the internet.
+
+
 # Security weakenings the LLM may not soften (guardrail, see triage/policy.py). Each entry: match (type,
 # attribute, change_kind) + optional `when` predicate + the lowest severity the verdict may have.
 never_soften:
   # ---------- GitHub ----------
   - { type: "github_branch_protection*", change_kind: deleted, floor_severity: critical,
-      reason: branch protection was deleted }
+      reason: branch protection was deleted,
+      controls: [code-review] }
   - { type: "github_branch_protection*", attribute: "*required_approving_review_count", when: decreased,
-      floor_severity: critical, reason: required pull request approvals were lowered }
+      floor_severity: critical, reason: required pull request approvals were lowered,
+      controls: [code-review] }
   - { type: "github_branch_protection*", attribute: allows_force_pushes, when: { changed_to: true },
-      floor_severity: critical, reason: force pushes were allowed on a protected branch }
+      floor_severity: critical, reason: force pushes were allowed on a protected branch,
+      controls: [code-review] }
   - { type: "github_branch_protection*", attribute: allows_deletions, when: { changed_to: true },
-      floor_severity: critical, reason: deleting a protected branch was allowed }
+      floor_severity: critical, reason: deleting a protected branch was allowed,
+      controls: [code-review] }
   - { type: github_repository_ruleset, change_kind: deleted, floor_severity: critical,
-      reason: a branch ruleset was deleted }
+      reason: a branch ruleset was deleted,
+      controls: [code-review] }
   - { type: github_repository_ruleset, attribute: "*required_approving_review_count", when: decreased,
-      floor_severity: critical, reason: required approvals in a ruleset were lowered }
+      floor_severity: critical, reason: required approvals in a ruleset were lowered,
+      controls: [code-review] }
   - { type: github_repository_ruleset, attribute: "rules*.deletion", when: { changed_to: false },
-      floor_severity: critical, reason: a ruleset no longer blocks deleting the branch }
+      floor_severity: critical, reason: a ruleset no longer blocks deleting the branch,
+      controls: [code-review] }
   - { type: github_repository_ruleset, attribute: "rules*.non_fast_forward", when: { changed_to: false },
-      floor_severity: critical, reason: a ruleset no longer blocks force pushes }
+      floor_severity: critical, reason: a ruleset no longer blocks force pushes,
+      controls: [code-review] }
   - { type: github_repository_ruleset, attribute: enforcement, when: { changed_to: disabled },
-      floor_severity: critical, reason: a ruleset was switched off }
+      floor_severity: critical, reason: a ruleset was switched off,
+      controls: [code-review] }
   - { type: github_repository_ruleset, attribute: enforcement, when: { changed_to: evaluate },
-      floor_severity: critical, reason: a ruleset was switched to report-only }
+      floor_severity: critical, reason: a ruleset was switched to report-only,
+      controls: [code-review] }
   - { type: github_team_repository, attribute: permission, when: { changed_to: admin },
-      floor_severity: high, reason: a team was granted admin access }
+      floor_severity: high, reason: a team was granted admin access,
+      controls: [least-privilege] }
   - { type: github_repository_collaborator, attribute: permission, when: { changed_to: admin },
-      floor_severity: high, reason: a user was granted admin access }
+      floor_severity: high, reason: a user was granted admin access,
+      controls: [least-privilege] }
 
   # ---------- AWS ----------
   - { type: "aws_*security_group*", attribute: "*", when: open_cidr_on_admin_port,
-      floor_severity: critical, reason: an admin port is open to 0.0.0.0/0 }
+      floor_severity: critical, reason: an admin port is open to 0.0.0.0/0,
+      controls: [network-exposure] }
   - { type: aws_s3_bucket_public_access_block, attribute: block_public_acls, when: { changed_to: false },
-      floor_severity: critical, reason: S3 public access block turned off (block_public_acls) }
+      floor_severity: critical, reason: S3 public access block turned off (block_public_acls),
+      controls: [public-storage] }
   - { type: aws_s3_bucket_public_access_block, attribute: block_public_policy, when: { changed_to: false },
-      floor_severity: critical, reason: S3 public access block turned off (block_public_policy) }
+      floor_severity: critical, reason: S3 public access block turned off (block_public_policy),
+      controls: [public-storage] }
   - { type: aws_s3_bucket_public_access_block, attribute: ignore_public_acls, when: { changed_to: false },
-      floor_severity: critical, reason: S3 public access block turned off (ignore_public_acls) }
+      floor_severity: critical, reason: S3 public access block turned off (ignore_public_acls),
+      controls: [public-storage] }
+  - { type: aws_s3_account_public_access_block, attribute: block_public_policy, when: { changed_to: false },
+      floor_severity: critical, reason: S3 account-level public access block turned off (block_public_policy),
+      controls: [public-storage] }
   - { type: aws_s3_bucket_public_access_block, attribute: restrict_public_buckets, when: { changed_to: false },
-      floor_severity: critical, reason: S3 public access block turned off (restrict_public_buckets) }
+      floor_severity: critical, reason: S3 public access block turned off (restrict_public_buckets),
+      controls: [public-storage] }
   - { type: aws_s3_bucket_policy, attribute: policy, when: json_wildcard_principal,
-      floor_severity: critical, reason: a bucket policy now allows any principal ("*") }
+      floor_severity: critical, reason: a bucket policy now allows any principal ("*"),
+      controls: [public-storage, least-privilege] }
   - { type: "aws_iam_*policy", attribute: policy, when: iam_wildcard,
-      floor_severity: critical, reason: an IAM policy now allows a wildcard action or resource }
+      floor_severity: critical, reason: an IAM policy now allows a wildcard action or resource,
+      controls: [least-privilege] }
   - { type: aws_db_instance, attribute: storage_encrypted, when: { changed_to: false },
-      floor_severity: critical, reason: database storage encryption was turned off }
+      floor_severity: critical, reason: database storage encryption was turned off,
+      controls: [encryption-at-rest] }
   - { type: aws_rds_cluster, attribute: storage_encrypted, when: { changed_to: false },
-      floor_severity: critical, reason: database storage encryption was turned off }
+      floor_severity: critical, reason: database storage encryption was turned off,
+      controls: [encryption-at-rest] }
   - { type: aws_ebs_volume, attribute: encrypted, when: { changed_to: false },
-      floor_severity: critical, reason: volume encryption was turned off }
+      floor_severity: critical, reason: volume encryption was turned off,
+      controls: [encryption-at-rest] }
   - { type: "aws_s3_bucket_server_side_encryption_configuration", change_kind: deleted,
-      floor_severity: critical, reason: bucket encryption configuration was removed }
+      floor_severity: critical, reason: bucket encryption configuration was removed,
+      controls: [encryption-at-rest] }
   - { type: aws_db_instance, attribute: publicly_accessible, when: { changed_to: true },
-      floor_severity: critical, reason: a database was made publicly accessible }
+      floor_severity: critical, reason: a database was made publicly accessible,
+      controls: [network-exposure] }
   - { type: aws_rds_cluster_instance, attribute: publicly_accessible, when: { changed_to: true },
-      floor_severity: critical, reason: a database was made publicly accessible }
+      floor_severity: critical, reason: a database was made publicly accessible,
+      controls: [network-exposure] }
   - { type: aws_cloudtrail, attribute: enable_logging, when: { changed_to: false },
-      floor_severity: critical, reason: CloudTrail logging was turned off }
+      floor_severity: critical, reason: CloudTrail logging was turned off,
+      controls: [audit-logging] }
 
   # ---------- Postgres (added in the database phase) ----------
   # Row-level security off, a policy dropped, a grant to PUBLIC: types pg_table_rls, pg_policy, pg_grant.
