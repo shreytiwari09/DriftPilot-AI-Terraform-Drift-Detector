@@ -7,11 +7,15 @@
 #   AWS_PROFILE=driftpilot-demo scripts/aws_demo.sh destroy      # delete it all (asks you to type the region)
 #   AWS_PROFILE=driftpilot-demo scripts/aws_demo.sh check-clean  # exit 1 if anything tagged demo=driftpilot is left
 #
+# Scope: "s3" (default) is one S3 bucket in us-east-1. "full" adds a security group and a small RDS database in
+# ap-south-1. Set `demo_scope = "full"` in demo/aws/terraform.tfvars (or DEMO_SCOPE=full for one command).
+#
 # It only works with a named profile (AWS_PROFILE), never with keys in environment variables, and only in
-# the demo region. `apply` and `destroy` print what they will do and wait for you to type the region name.
+# the scope's region. `apply` and `destroy` print what they will do and wait for you to type the region name.
 set -euo pipefail
 
-REGION="ap-south-1"
+SCOPE="s3" # s3 or full; resolved by resolve_scope
+REGION=""  # us-east-1 for s3, ap-south-1 for full; set by resolve_scope
 TAG_KEY="demo"
 TAG_VALUE="driftpilot"
 NAME_PREFIX="driftpilot-demo"
@@ -25,20 +29,37 @@ die() {
 }
 
 usage() {
-  sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit "${1:-1}"
 }
 
+# The scope comes from DEMO_SCOPE, else from `demo_scope = "..."` in terraform.tfvars, else "s3".
+# The region follows the scope; any other region is refused below.
+resolve_scope() {
+  local file="${DEMO_DIR}/terraform.tfvars"
+  SCOPE="${DEMO_SCOPE:-}"
+  if [[ -z "${SCOPE}" && -f "${file}" ]]; then
+    SCOPE="$(sed -n 's/^[[:space:]]*demo_scope[[:space:]]*=[[:space:]]*"\([A-Za-z0-9_-]*\)".*/\1/p' "${file}" | tail -n 1)"
+  fi
+  SCOPE="${SCOPE:-s3}"
+  case "${SCOPE}" in
+    s3) REGION="us-east-1" ;;
+    full) REGION="ap-south-1" ;;
+    *) die "unknown demo scope '${SCOPE}' (use s3 or full)" ;;
+  esac
+}
+
 require_safe_environment() {
+  resolve_scope
   [[ -n "${AWS_PROFILE:-}" ]] || die "AWS_PROFILE is not set. Run:  export AWS_PROFILE=driftpilot-demo  (see demo/aws/README.md)"
   if [[ -n "${AWS_ACCESS_KEY_ID:-}" || -n "${AWS_SECRET_ACCESS_KEY:-}" || -n "${AWS_SESSION_TOKEN:-}" ]]; then
     die "AWS keys are set in the environment. Unset them and use a profile (aws configure --profile ...)."
   fi
   if [[ -n "${AWS_REGION:-}" && "${AWS_REGION}" != "${REGION}" ]]; then
-    die "AWS_REGION is ${AWS_REGION}; this demo only runs in ${REGION}."
+    die "AWS_REGION is ${AWS_REGION}; the ${SCOPE} scope of this demo only runs in ${REGION}."
   fi
   if [[ -n "${AWS_DEFAULT_REGION:-}" && "${AWS_DEFAULT_REGION}" != "${REGION}" ]]; then
-    die "AWS_DEFAULT_REGION is ${AWS_DEFAULT_REGION}; this demo only runs in ${REGION}."
+    die "AWS_DEFAULT_REGION is ${AWS_DEFAULT_REGION}; the ${SCOPE} scope of this demo only runs in ${REGION}."
   fi
   export AWS_REGION="${REGION}" AWS_DEFAULT_REGION="${REGION}"
   command -v aws >/dev/null || die "the AWS CLI is not installed (see demo/aws/README.md, step 1)"
@@ -50,10 +71,13 @@ show_identity() {
   arn="$(aws sts get-caller-identity --query Arn --output text)" || die "cannot use profile '${AWS_PROFILE}' (expired or wrong keys?)"
   echo "Profile: ${AWS_PROFILE}"
   echo "Acting as: ${arn}"
+  echo "Scope: ${SCOPE}"
   echo "Region: ${REGION}"
 }
 
+# Only the "full" scope needs terraform.tfvars (your IP for the database firewall).
 require_tfvars() {
+  [[ "${SCOPE}" == "full" ]] || return 0
   [[ -f "${DEMO_DIR}/terraform.tfvars" ]] || die "demo/aws/terraform.tfvars is missing. Copy terraform.tfvars.example to terraform.tfvars and put your IP in it."
   if grep -Eq '^[[:space:]]*my_ip_cidr[[:space:]]*=[[:space:]]*"203\.0\.113\.7/32"' "${DEMO_DIR}/terraform.tfvars"; then
     die "terraform.tfvars still has the example IP (203.0.113.7/32). Put your own address there."
@@ -64,11 +88,22 @@ tf() {
   terraform -chdir="${DEMO_DIR}" "$@"
 }
 
+# plan/apply/destroy always get the scope from here, so the script and Terraform cannot disagree.
+tf_scoped() {
+  local sub="$1"
+  shift
+  tf "${sub}" -var "demo_scope=${SCOPE}" "$@"
+}
+
 confirm_region() {
   local what="$1" answer
   echo
   echo "This will ${what}."
-  echo "AWS usage draws down your credits while the database exists. Destroy the demo straight after use."
+  if [[ "${SCOPE}" == "full" ]]; then
+    echo "AWS usage draws down your credits while the database exists. Destroy the demo straight after use."
+  else
+    echo "An empty bucket costs essentially nothing, but destroy the demo when you are done."
+  fi
   printf 'To continue, type the region name (%s): ' "${REGION}"
   read -r answer || answer=""
   [[ "${answer}" == "${REGION}" ]] || die "not confirmed, nothing was changed."
@@ -96,9 +131,30 @@ add_left() {
   done <<<"${QUERY_RESULT}"
 }
 
-# Fills TAGGED with the ARN of everything the tagging API knows with demo=driftpilot (S3, security groups, RDS...).
+# Fills TAGGED with the buckets named driftpilot-demo-* that carry demo=driftpilot. Plain S3 calls only (the
+# "s3" scope never depends on the tagging API, which has not been tried against this account).
+find_tagged_s3() {
+  local name value
+  TAGGED=()
+  query "S3 buckets" s3api list-buckets --query "Buckets[?starts_with(Name, '${NAME_PREFIX}-')].Name"
+  while IFS= read -r name; do
+    [[ -n "${name}" ]] || continue
+    # A bucket whose tags cannot be read is simply not listed here; check-clean still lists it by name.
+    value="$(aws s3api get-bucket-tagging --bucket "${name}" \
+      --query "TagSet[?Key=='${TAG_KEY}'].Value" --output text 2>/dev/null)" || value=""
+    [[ "${value}" == "${TAG_VALUE}" ]] && TAGGED+=("arn:aws:s3:::${name}")
+  done <<<"${QUERY_RESULT}"
+  return 0
+}
+
+# Fills TAGGED with the ARN of everything demo=driftpilot: via the tagging API (S3, security groups, RDS...) in
+# the "full" scope, via S3 alone in the "s3" scope.
 find_tagged() {
   local line
+  if [[ "${SCOPE}" == "s3" ]]; then
+    find_tagged_s3
+    return 0
+  fi
   TAGGED=()
   query "tagged resources" resourcegroupstaggingapi get-resources \
     --tag-filters "Key=${TAG_KEY},Values=${TAG_VALUE}" --query 'ResourceTagMappingList[].ResourceARN'
@@ -109,10 +165,21 @@ find_tagged() {
 
 # Fills LEFT with one line per leftover; empty means the account is clean.
 find_leftovers() {
-  local account line
+  local line
   LEFT=()
   find_tagged
   for line in "${TAGGED[@]+"${TAGGED[@]}"}"; do LEFT+=("tagged resource: ${line}"); done
+  if [[ "${SCOPE}" == "full" ]]; then
+    find_leftovers_full
+  fi
+  query "S3 buckets" s3api list-buckets --query "Buckets[?starts_with(Name, '${NAME_PREFIX}-')].Name"
+  add_left "S3 bucket"
+}
+
+# Extra leftovers of the "full" scope: database, snapshots, security groups, budget. Never run in the "s3" scope
+# (EC2 and RDS are not reachable there, and nothing of the sort is created).
+find_leftovers_full() {
+  local account
   query "RDS instances" rds describe-db-instances \
     --query "DBInstances[?starts_with(DBInstanceIdentifier, '${NAME_PREFIX}')].DBInstanceIdentifier"
   add_left "RDS instance"
@@ -128,8 +195,6 @@ find_leftovers() {
   query "security groups" ec2 describe-security-groups \
     --filters "Name=tag:${TAG_KEY},Values=${TAG_VALUE}" --query 'SecurityGroups[].GroupId'
   add_left "security group"
-  query "S3 buckets" s3api list-buckets --query "Buckets[?starts_with(Name, '${NAME_PREFIX}-')].Name"
-  add_left "S3 bucket"
   query "account id" sts get-caller-identity --query Account
   account="${QUERY_RESULT}"
   # The budget is optional and free; a missing permission here is only a warning.
@@ -141,12 +206,13 @@ find_leftovers() {
   fi
 }
 
+
 cmd_plan() {
   require_safe_environment
   show_identity
   require_tfvars
   tf init -input=false >/dev/null
-  tf plan -input=false
+  tf_scoped plan -input=false
 }
 
 cmd_apply() {
@@ -155,8 +221,12 @@ cmd_apply() {
   require_tfvars
   tf init -input=false >/dev/null
   trap 'rm -f "${PLAN_FILE}"' EXIT
-  tf plan -input=false -out="${PLAN_FILE}"
-  confirm_region "CREATE the resources above in your AWS account (an S3 bucket, a security group and one small RDS database)"
+  tf_scoped plan -input=false -out="${PLAN_FILE}"
+  if [[ "${SCOPE}" == "full" ]]; then
+    confirm_region "CREATE the resources above in your AWS account (an S3 bucket, a security group and one small RDS database)"
+  else
+    confirm_region "CREATE the resources above in your AWS account (one S3 bucket in ${REGION})"
+  fi
   tf apply -input=false "${PLAN_FILE}"
   echo
   echo "Done. Next steps: demo/aws/RUNBOOK.md. When finished: scripts/aws_demo.sh destroy"
@@ -166,16 +236,22 @@ cmd_status() {
   require_safe_environment
   show_identity
   echo
-  echo "RDS instances named ${NAME_PREFIX}*:"
-  aws rds describe-db-instances \
-    --query "DBInstances[?starts_with(DBInstanceIdentifier, '${NAME_PREFIX}')].[DBInstanceIdentifier,DBInstanceStatus,DBInstanceClass,PubliclyAccessible,BackupRetentionPeriod]" \
-    --output table
+  if [[ "${SCOPE}" == "full" ]]; then
+    echo "RDS instances named ${NAME_PREFIX}*:"
+    aws rds describe-db-instances \
+      --query "DBInstances[?starts_with(DBInstanceIdentifier, '${NAME_PREFIX}')].[DBInstanceIdentifier,DBInstanceStatus,DBInstanceClass,PubliclyAccessible,BackupRetentionPeriod]" \
+      --output table
+  fi
   echo "S3 buckets named ${NAME_PREFIX}-*:"
   aws s3api list-buckets --query "Buckets[?starts_with(Name, '${NAME_PREFIX}-')].[Name,CreationDate]" --output table
-  echo "Security groups tagged ${TAG_KEY}=${TAG_VALUE}:"
-  aws ec2 describe-security-groups --filters "Name=tag:${TAG_KEY},Values=${TAG_VALUE}" \
-    --query 'SecurityGroups[].[GroupId,GroupName]' --output table
-  echo "Everything the tagging API finds with ${TAG_KEY}=${TAG_VALUE}:"
+  if [[ "${SCOPE}" == "full" ]]; then
+    echo "Security groups tagged ${TAG_KEY}=${TAG_VALUE}:"
+    aws ec2 describe-security-groups --filters "Name=tag:${TAG_KEY},Values=${TAG_VALUE}" \
+      --query 'SecurityGroups[].[GroupId,GroupName]' --output table
+    echo "Everything the tagging API finds with ${TAG_KEY}=${TAG_VALUE}:"
+  else
+    echo "Buckets among them that carry ${TAG_KEY}=${TAG_VALUE}:"
+  fi
   find_tagged
   printf '  %s\n' "${TAGGED[@]+"${TAGGED[@]}"}"
 }
@@ -184,14 +260,14 @@ cmd_destroy() {
   require_safe_environment
   show_identity
   find_tagged
-  [[ ${#TAGGED[@]} -gt 0 ]] || die "no resource tagged ${TAG_KEY}=${TAG_VALUE} exists in ${REGION}: nothing to destroy."
+  [[ ${#TAGGED[@]} -gt 0 ]] || die "no resource tagged ${TAG_KEY}=${TAG_VALUE} exists in ${REGION} (scope ${SCOPE}): nothing to destroy."
   echo "Tagged resources found:"
   printf '  %s\n' "${TAGGED[@]}"
   require_tfvars
   tf init -input=false >/dev/null
-  tf plan -destroy -input=false
+  tf_scoped plan -destroy -input=false
   confirm_region "DELETE everything the plan above lists (Terraform only deletes what is in its own state)"
-  tf destroy -input=false -auto-approve
+  tf_scoped destroy -input=false -auto-approve
   echo
   echo "Checking that nothing is left..."
   if ! report_clean; then
@@ -207,7 +283,11 @@ report_clean() {
     printf '  %s\n' "${LEFT[@]}"
     return 1
   fi
-  echo "Clean: nothing tagged ${TAG_KEY}=${TAG_VALUE} and no ${NAME_PREFIX} database, snapshot, bucket or security group."
+  if [[ "${SCOPE}" == "full" ]]; then
+    echo "Clean: nothing tagged ${TAG_KEY}=${TAG_VALUE} and no ${NAME_PREFIX} database, snapshot, bucket or security group."
+  else
+    echo "Clean: nothing tagged ${TAG_KEY}=${TAG_VALUE} and no ${NAME_PREFIX}-* bucket (S3 scope: EC2 and RDS are not checked)."
+  fi
 }
 
 cmd_check_clean() {
