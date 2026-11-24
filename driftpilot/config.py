@@ -92,6 +92,16 @@ class DashboardConfig(BaseModel):
     publish_addresses: bool = True  # false: resource addresses become stable hashes in data.json
 
 
+class DatabaseConfig(BaseModel):
+    """Postgres schema drift: migration files against a live database (`driftpilot db ...`)."""
+
+    migrations: str = "migrations"  # folder with the `*.sql` migration files, relative to --dir
+    url_env: str = "DRIFTPILOT_DB_URL"  # env var with the live database URL (read-only role)
+    scratch_url_env: str = "DRIFTPILOT_SCRATCH_DB_URL"  # server where scratch databases are made
+    schemas: list[str] = ["public"]
+    ignore: list[str] = []  # globs on `schema.table` that are left out of both catalogs
+
+
 class Config(BaseModel):
     severity_overrides: list[SeverityOverride] = []
     ignore: list[str] = []  # address/attribute globs, e.g. "docker_container.*.restart"
@@ -104,6 +114,7 @@ class Config(BaseModel):
     limits: LimitsConfig = LimitsConfig()
     ownership: OwnershipConfig = OwnershipConfig()
     dashboard: DashboardConfig = DashboardConfig()
+    database: DatabaseConfig = DatabaseConfig()
 
 
 def load_config(path: Path | None, working_dir: Path) -> Config:

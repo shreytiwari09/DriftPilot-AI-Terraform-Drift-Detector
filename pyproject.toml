@@ -28,6 +28,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.5", "moto[s3,ec2,iam]>=5"]  # moto: offline AWS mock for the scanner tests
 aws = ["boto3>=1.34"]  # AWS scanner (S3 buckets, security groups, IAM users)
+db = ["psycopg[binary]>=3.2"]  # Postgres schema drift (driftpilot db ...)
 demo = ["streamlit>=1.40"]  # local demo console (demo/console), not needed by the Action
 
 [project.scripts]
@@ -41,6 +42,7 @@ packages = ["driftpilot"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["postgres: needs a live Postgres; skipped unless DRIFTPILOT_TEST_DB_URL is set"]
 
 [tool.ruff]
 line-length = 100

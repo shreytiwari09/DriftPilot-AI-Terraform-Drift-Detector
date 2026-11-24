@@ -40,7 +40,7 @@ OPEN_CIDRS = {"0.0.0.0/0", "::/0"}
 class RuleMatch(BaseModel):
     type: str = "*"
     attribute: str = "*"
-    change_kind: Literal["modified", "deleted"] | None = None
+    change_kind: Literal["modified", "deleted", "added"] | None = None
 
 
 class RuleVerdict(BaseModel):
@@ -58,7 +58,7 @@ class NeverSoften(BaseModel):
 
     type: str = "*"
     attribute: str = "*"
-    change_kind: Literal["modified", "deleted"] | None = None
+    change_kind: Literal["modified", "deleted", "added"] | None = None
     when: str | dict[str, Any] | None = None
     floor_severity: Severity
     reason: str

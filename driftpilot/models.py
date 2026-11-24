@@ -32,7 +32,9 @@ class DriftFinding(BaseModel):
     provider: str
     resource_type: str
     address: str
-    change_kind: Literal["modified", "deleted"]
+    change_kind: Literal[
+        "modified", "deleted", "added"
+    ]  # added: only in the real system (databases)
     attribute_path: str | None
     before: Any  # redacted
     after: Any  # redacted

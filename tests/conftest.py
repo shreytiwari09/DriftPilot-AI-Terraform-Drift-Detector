@@ -1,4 +1,5 @@
 import json
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -30,3 +31,13 @@ def load_fixture() -> Callable[[str], dict[str, Any]]:
         return json.loads((FIXTURES / f"{name}.json").read_text())
 
     return _load
+
+
+def pytest_collection_modifyitems(config, items) -> None:
+    """`@pytest.mark.postgres` tests need a real server: skip them unless a test URL is given."""
+    if os.environ.get("DRIFTPILOT_TEST_DB_URL"):
+        return
+    skip = pytest.mark.skip(reason="set DRIFTPILOT_TEST_DB_URL to run the live Postgres tests")
+    for item in items:
+        if "postgres" in item.keywords:
+            item.add_marker(skip)
