@@ -200,3 +200,16 @@ def test_policy_summary_is_compact() -> None:
         "roles": ["public"],
         "using": "true",
     }
+
+
+def test_secret_looking_values_are_hidden_and_the_finding_is_marked_sensitive() -> None:
+    token = "ghp_" + "a" * 36
+    live = edit(shop(), "orders", lambda t: setattr(t.columns[3], "default", f"'{token}'"))
+    [f] = findings(shop(), live)
+    assert token not in str(f.after) and "<redacted>" in str(f.after) and f.sensitive
+
+
+def test_a_column_called_password_is_not_a_secret() -> None:
+    live = edit(shop(), "users", lambda t: t.columns.append(Column(name="password", type="text")))
+    [f] = findings(shop(), live)
+    assert f.after == {"type": "text", "nullable": True} and not f.sensitive

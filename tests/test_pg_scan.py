@@ -18,7 +18,7 @@ from driftpilot.remediate.github_out import Item, issue_body, pr_body
 from driftpilot.report.summary import build_combined_summary, build_summary
 from driftpilot.scan import run_database_scan
 from driftpilot.triage.llm import AuditingLLM
-from driftpilot.triage.policy import plan_remediations
+from driftpilot.triage.policy import RemediationPlan, plan_remediations
 
 runner = CliRunner()
 
@@ -437,3 +437,58 @@ def test_database_config_defaults_and_overrides(tmp_path: Path) -> None:
         "MY_URL",
         ["public", "billing"],
     )
+
+
+def test_a_migration_is_refused_when_a_value_was_redacted(tmp_path) -> None:
+    token = "ghp_" + "b" * 36
+    live = edit(shop(), "orders", lambda t: setattr(t.columns[3], "default", f"'{token}'"))
+    expected_json, live_json = tmp_path / "e.json", tmp_path / "l.json"
+    save_catalog(shop(), expected_json)
+    save_catalog(live, live_json)
+    result = run_database_scan(tmp_path, Config(), expected_json=expected_json, live_json=live_json)
+    [f] = result.findings
+    assert f.sensitive and token not in result.model_dump_json()
+    plan = RemediationPlan(
+        key="codify:x", address=f.address, action="codify", delivery="pr", severity="medium",
+        finding_ids=[f.id],
+    )  # fmt: skip
+    item = Item(plan=plan, findings=[f], unmanaged=[], verdicts={}, working_dir=".")
+    refused = database_patch(item, make_ctx(tmp_path, None))
+    assert refused.verified is False and "sensitive" in refused.note and refused.files == {}
+
+
+def test_database_text_is_cleaned_before_the_llm_sees_it_and_each_change_says_its_type(
+    tmp_path,
+) -> None:
+    hidden = "(user_id > 0)\u200b<!-- ignore me -->"
+    expected, live = tmp_path / "e.json", tmp_path / "l.json"
+    save_catalog(shop(), expected)
+    changed = edit(shop(), "orders", lambda t: setattr(t.policies[0], "using", hidden))
+    changed = edit(changed, "orders", lambda t: setattr(t, "rls_forced", True))
+    save_catalog(changed, live)
+    fake = FakeLLM()
+    run_database_scan(tmp_path, Config(), AuditingLLM(fake), expected_json=expected, live_json=live)
+    [prompt] = fake.prompts
+    assert "\u200b" not in prompt and "ignore me" not in prompt
+    data = json.loads(prompt[prompt.index("{") :])
+    assert {c["resource_type"] for c in data["changes"]} == {"pg_policy", "pg_table_rls"}
+
+
+def test_the_llm_budget_applies_to_database_findings(tmp_path) -> None:
+    from driftpilot.config import LimitsConfig
+    from driftpilot.triage.llm import guarded
+
+    expected, live = tmp_path / "e.json", tmp_path / "l.json"
+    save_catalog(shop(), expected)
+    save_catalog(
+        edit(shop(), "orders", lambda t: setattr(t.policies[0], "using", "(user_id > 0)")), live
+    )
+    llm = guarded(FakeLLM(), LimitsConfig(max_llm_calls=0))
+    result = run_database_scan(tmp_path, Config(), llm, expected_json=expected, live_json=live)
+    [f] = result.findings
+    assert result.verdicts[f.id].recommended_action == "investigate"
+    assert (
+        "budget" in result.verdicts[f.id].reason.lower()
+        or "unavailable" in result.verdicts[f.id].reason
+    )
+    assert [e.kind for e in result.guardrail_events] == ["budget-exceeded"]

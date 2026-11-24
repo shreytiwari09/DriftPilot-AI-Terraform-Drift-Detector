@@ -103,9 +103,12 @@ def build_input(
     first = findings[0]
     block = find_block(working_dir, first.address) if working_dir else None
     clean = sanitize_value if guardrails else (lambda value, *_, **__: value)
+    # A database table's grants, policies and settings share one address: say what each change is.
+    mixed = len({f.resource_type for f in findings}) > 1
     changes = []
     for f in findings:
         change = {
+            **({"resource_type": clean(f.resource_type)} if mixed else {}),
             "attribute_path": shown_path(f, guardrails),
             "change_kind": f.change_kind,
             "before": clean(f.before, VALUE_LIMIT),

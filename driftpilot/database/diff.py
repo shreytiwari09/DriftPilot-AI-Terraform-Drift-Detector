@@ -11,6 +11,7 @@ from driftpilot.collector import finding_id
 from driftpilot.database import PROVIDER
 from driftpilot.database.catalog import Catalog, Column, Table
 from driftpilot.models import DriftFinding
+from driftpilot.redact import scrub_patterns
 
 _COLUMN_ATTRS = ("type", "nullable", "default", "generated", "comment")
 
@@ -27,6 +28,7 @@ class _Diff:
     def add(
         self, rtype: str, address: str, attr: str | None, before: Any, after: Any, kind: str
     ) -> None:
+        clean_before, clean_after = _scrub(before), _scrub(after)
         self.findings.append(
             DriftFinding(
                 id=finding_id(address, attr),
@@ -37,8 +39,9 @@ class _Diff:
                 address=address,
                 change_kind=kind,
                 attribute_path=attr,
-                before=before,
-                after=after,
+                before=clean_before,
+                after=clean_after,
+                sensitive=clean_before != before or clean_after != after,
             )
         )
 
@@ -121,6 +124,18 @@ class _Diff:
                     self.add("pg_column", col_address, attr, x, y, "modified")
             if _auto(a) != _auto(b):
                 self.add("pg_column", col_address, "auto", _auto(a), _auto(b), "modified")
+
+
+def _scrub(value: Any) -> Any:
+    """Secret-looking text (tokens, `password=...`) in a default, policy or comment is hidden.
+
+    Only the values are checked: a column called `password` is a name, not a secret.
+    """
+    if isinstance(value, dict):
+        return {k: _scrub(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_scrub(v) for v in value]
+    return scrub_patterns(value) if isinstance(value, str) else value
 
 
 def _kind(old: dict[str, Any], new: dict[str, Any], key: str) -> str:

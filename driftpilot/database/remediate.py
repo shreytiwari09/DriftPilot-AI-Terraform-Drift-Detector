@@ -39,6 +39,8 @@ def database_patch(item: Item, ctx: DatabaseContext) -> Patch | None:
     """
     if item.plan.action != "codify":
         return None
+    if any(f.sensitive for f in item.findings):
+        return Patch(False, {}, "", 0, "refused: a changed value is sensitive and was redacted")
     sql = migration_sql(item.findings)
     if sql is None:
         return Patch(False, {}, "", 0, "no automatic migration for this change: write it by hand")
