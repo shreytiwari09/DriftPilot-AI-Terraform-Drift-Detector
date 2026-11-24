@@ -1,0 +1,10 @@
+# DriftPilot settings for the real-Azure demo (see README.md and RUNBOOK.md).
+# No keys here: Terraform and DriftPilot use your `az login` session. There is no Azure scanner for resources created
+# outside Terraform yet: DriftPilot compares what Terraform knows (a refresh-only plan) with what Azure says now.
+mode: advise          # issues only: nothing is merged or applied. DriftPilot never runs terraform apply.
+ownership:
+  default_team: platform
+  environment: demo
+  repo: demo/azure
+llm:
+  enabled: true       # needs GEMINI_API_KEY; use `--no-llm` to run with the rules only

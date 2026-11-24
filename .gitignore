@@ -29,3 +29,9 @@ demo/aws/terraform.tfvars
 demo/aws/terraform.tfstate*
 demo/aws/.terraform/
 demo/aws/.demo.plan
+
+# Azure demo (demo/azure): same rules, spelled out. terraform.tfvars holds your IP address.
+demo/azure/terraform.tfvars
+demo/azure/terraform.tfstate*
+demo/azure/.terraform/
+demo/azure/.demo.plan

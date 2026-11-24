@@ -15,6 +15,7 @@ match model output. Changing a label or adding a case means re-running every con
 | `github.yaml` | Variants of the GitHub scenarios (other values, increases vs decreases, other settings) |
 | `docker.yaml` | Variants of the Docker scenarios |
 | `aws.yaml` | AWS-style resources (security groups, S3, IAM, instances, databases), hand-built plan JSON |
+| `azure.yaml` | Azure-style resources (storage account settings, network security group rules, tags), hand-built plan JSON |
 | `noise.yaml` | Changes that are not real drift |
 | `unmanaged.yaml` | Resources created outside Terraform |
 | `adversarial.yaml` | Real drift whose text tries to steer the AI (prompt injection); scored separately, see "Adversarial" below |
