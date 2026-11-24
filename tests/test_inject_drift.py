@@ -10,8 +10,11 @@ inject_drift = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(inject_drift)
 
 
-def test_all_19_scenarios_defined() -> None:
-    assert sorted(inject_drift.SCENARIOS) == list(range(1, 20))
+def test_all_24_scenarios_defined() -> None:
+    assert sorted(inject_drift.SCENARIOS) == list(range(1, 25))
+    assert [n for n, s in inject_drift.SCENARIOS.items() if s.provider == "aws"] == list(
+        range(20, 25)
+    )
 
 
 def test_list_needs_no_credentials(capsys) -> None:

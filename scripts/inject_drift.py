@@ -11,6 +11,10 @@ Scenarios 1 and 10 delete a resource, so reverting them means `terraform apply` 
 Scenarios 15-19 change the local Postgres demo in demo/postgres (docker compose up -d first), as
 its owner role `app`. They only ever connect to localhost (set DRIFTPILOT_DEMO_ADMIN_URL for
 another port).
+
+Scenarios 20-24 change the real AWS demo in demo/aws (see its README). They need
+DRIFTPILOT_AWS_DEMO=1, a region in AWS_REGION (or AWS_DEFAULT_REGION), credentials from
+AWS_PROFILE, and they refuse to touch any resource that is not tagged demo=driftpilot.
 """
 
 import argparse
@@ -39,6 +43,12 @@ WEB_CONTAINER, CACHE_CONTAINER, HANDMADE_CONTAINER = (
 )
 MANAGED_LABELS = {"managed-by": "terraform", "app": "driftpilot-demo"}
 DEMO_DB_URL = "postgresql://app:app@localhost:5433/appdb"  # demo/postgres, local only
+
+AWS_DEMO_TAG = ("demo", "driftpilot")  # the only resources the AWS scenarios may touch
+AWS_BUCKET_PREFIX = "driftpilot-demo-"
+AWS_SG_NAME = "driftpilot-demo-db"
+AWS_DB_ID = "driftpilot-demo-db"
+AWS_HAND_TAG = ("reviewed-by", "hand")  # scenario 24 adds this tag
 
 
 @dataclass
@@ -217,6 +227,153 @@ PG_SCENARIOS = {
          "ALTER TABLE users DROP COLUMN IF EXISTS nickname"),
 }  # fmt: skip
 
+# ---------- AWS scenarios (demo/aws, real AWS: only resources tagged demo=driftpilot) ----------
+
+
+def aws_session() -> Any:
+    """A boto3 session for the demo region. Refuses to run unless DRIFTPILOT_AWS_DEMO=1."""
+    if os.environ.get("DRIFTPILOT_AWS_DEMO") != "1":
+        sys.exit("refusing to run: set DRIFTPILOT_AWS_DEMO=1 to confirm you mean the AWS demo")
+    region = os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION")
+    if not region:
+        sys.exit("refusing to run: set AWS_REGION (the demo's region, e.g. ap-south-1)")
+    import boto3
+
+    return boto3.Session(region_name=region)
+
+
+def is_demo_tagged(tags: dict[str, str]) -> bool:
+    return tags.get(AWS_DEMO_TAG[0]) == AWS_DEMO_TAG[1]
+
+
+def tags_of(pairs: list[dict[str, str]]) -> dict[str, str]:
+    """Turns [{"Key": k, "Value": v}] (or lower-case keys, for tag filters) into a dict."""
+    return {(p.get("Key") or p.get("key")): (p.get("Value") or p.get("value")) for p in pairs}
+
+
+def bucket_tags(s3: Any, name: str) -> dict[str, str]:
+    from botocore.exceptions import ClientError
+
+    try:
+        return tags_of(s3.get_bucket_tagging(Bucket=name)["TagSet"])
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "NoSuchTagSet":
+            return {}
+        raise
+
+
+def demo_bucket(session: Any) -> tuple[Any, str]:
+    """The demo bucket: named driftpilot-demo-* AND tagged demo=driftpilot. Exactly one."""
+    s3 = session.client("s3")
+    names = [
+        b["Name"]
+        for b in s3.list_buckets().get("Buckets", [])
+        if b["Name"].startswith(AWS_BUCKET_PREFIX) and is_demo_tagged(bucket_tags(s3, b["Name"]))
+    ]
+    if len(names) != 1:
+        sys.exit(f"expected exactly one bucket tagged demo=driftpilot, found {len(names)}")
+    return s3, names[0]
+
+
+def demo_security_group(session: Any) -> tuple[Any, str]:
+    ec2 = session.client("ec2")
+    groups = ec2.describe_security_groups(
+        Filters=[
+            {"Name": f"tag:{AWS_DEMO_TAG[0]}", "Values": [AWS_DEMO_TAG[1]]},
+            {"Name": "group-name", "Values": [AWS_SG_NAME]},
+        ]
+    )["SecurityGroups"]
+    groups = [g for g in groups if is_demo_tagged(tags_of(g.get("Tags", [])))]
+    if len(groups) != 1:
+        sys.exit(f"expected exactly one security group tagged demo=driftpilot, found {len(groups)}")
+    return ec2, groups[0]["GroupId"]
+
+
+def demo_db(session: Any) -> tuple[Any, str]:
+    rds = session.client("rds")
+    from botocore.exceptions import ClientError
+
+    try:
+        db = rds.describe_db_instances(DBInstanceIdentifier=AWS_DB_ID)["DBInstances"][0]
+    except ClientError as e:
+        sys.exit(f"demo database {AWS_DB_ID} not found: {e.response['Error']['Code']}")
+    tags = tags_of(rds.list_tags_for_resource(ResourceName=db["DBInstanceArn"])["TagList"])
+    if not is_demo_tagged(tags):
+        sys.exit(f"refusing to touch {AWS_DB_ID}: it is not tagged demo=driftpilot")
+    return rds, db["DBInstanceIdentifier"]
+
+
+def set_public_access_block(blocked: bool) -> None:
+    s3, bucket = demo_bucket(aws_session())
+    s3.put_public_access_block(
+        Bucket=bucket,
+        PublicAccessBlockConfiguration={
+            "BlockPublicAcls": blocked,
+            "IgnorePublicAcls": blocked,
+            "BlockPublicPolicy": blocked,
+            "RestrictPublicBuckets": blocked,
+        },
+    )
+
+
+def ssh_open_to_world() -> list[dict[str, Any]]:
+    return [
+        {
+            "IpProtocol": "tcp",
+            "FromPort": 22,
+            "ToPort": 22,
+            "IpRanges": [{"CidrIp": "0.0.0.0/0", "Description": "hotfix: temporary ssh"}],
+        }
+    ]
+
+
+def change_ssh_rule(open_it: bool) -> None:
+    from botocore.exceptions import ClientError
+
+    ec2, group_id = demo_security_group(aws_session())
+    call = ec2.authorize_security_group_ingress if open_it else ec2.revoke_security_group_ingress
+    try:
+        call(GroupId=group_id, IpPermissions=ssh_open_to_world())
+    except ClientError as e:  # already open / already closed: nothing to do
+        if e.response["Error"]["Code"] not in (
+            "InvalidPermission.Duplicate",
+            "InvalidPermission.NotFound",
+        ):
+            raise
+
+
+def set_backup_retention(days: int) -> None:
+    rds, identifier = demo_db(aws_session())
+    rds.modify_db_instance(
+        DBInstanceIdentifier=identifier, BackupRetentionPeriod=days, ApplyImmediately=True
+    )
+
+
+def public_baseline() -> bool:
+    """The `publicly_accessible` value in demo/aws (var.db_publicly_accessible, default true)."""
+    return os.environ.get("DRIFTPILOT_AWS_DEMO_PUBLIC", "true").lower() != "false"
+
+
+def set_publicly_accessible(value: bool) -> None:
+    rds, identifier = demo_db(aws_session())
+    rds.modify_db_instance(
+        DBInstanceIdentifier=identifier, PubliclyAccessible=value, ApplyImmediately=True
+    )
+
+
+def edit_bucket_tag(add: bool) -> None:
+    s3, bucket = demo_bucket(aws_session())
+    tags = bucket_tags(s3, bucket)
+    if add:
+        tags[AWS_HAND_TAG[0]] = AWS_HAND_TAG[1]
+    else:
+        tags.pop(AWS_HAND_TAG[0], None)
+    # demo=driftpilot is always kept, so the guard still recognises the bucket afterwards
+    s3.put_bucket_tagging(
+        Bucket=bucket, Tagging={"TagSet": [{"Key": k, "Value": v} for k, v in tags.items()]}
+    )
+
+
 SCENARIOS = {
     s.number: s
     for s in [
@@ -255,6 +412,20 @@ SCENARIOS = {
             Scenario(n, "postgres", desc, expected, *pg(inject, revert))
             for n, (desc, expected, inject, revert) in PG_SCENARIOS.items()
         ),
+        Scenario(20, "aws", "S3 public access block switched off on the demo bucket",
+                 "critical / revert",
+                 lambda _: set_public_access_block(False), lambda _: set_public_access_block(True)),
+        Scenario(21, "aws", "Security group opens SSH (22) to 0.0.0.0/0", "critical / revert",
+                 lambda _: change_ssh_rule(True), lambda _: change_ssh_rule(False)),
+        Scenario(22, "aws", "RDS backup retention 1 -> 0 days", "high / revert",
+                 lambda _: set_backup_retention(0), lambda _: set_backup_retention(1)),
+        Scenario(23, "aws", "RDS publicly_accessible flipped away from the code's value",
+                 "critical if turned on, otherwise ask a person",
+                 lambda _: set_publicly_accessible(not public_baseline()),
+                 lambda _: set_publicly_accessible(public_baseline())),
+        Scenario(24, "aws", f"Harmless tag {AWS_HAND_TAG[0]}={AWS_HAND_TAG[1]} added to the bucket",
+                 "low / codify",
+                 lambda _: edit_bucket_tag(True), lambda _: edit_bucket_tag(False)),
     ]
 }  # fmt: skip
 
@@ -264,7 +435,7 @@ def main(argv: list[str] | None = None) -> None:
         description=__doc__, formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument("command", choices=["list", "inject", "revert"])
-    parser.add_argument("scenarios", nargs="*", type=int, help="scenario numbers (1-19)")
+    parser.add_argument("scenarios", nargs="*", type=int, help="scenario numbers (1-24)")
     parser.add_argument("--tf-dir", type=Path, help="Terraform dir for reverts that need apply")
     args = parser.parse_args(argv)
 
@@ -274,7 +445,7 @@ def main(argv: list[str] | None = None) -> None:
         return
     unknown = [n for n in args.scenarios if n not in SCENARIOS]
     if not args.scenarios or unknown:
-        parser.error(f"give scenario numbers 1-19 (unknown: {unknown})")
+        parser.error(f"give scenario numbers 1-24 (unknown: {unknown})")
     for number in args.scenarios:
         scenario = SCENARIOS[number]
         print(f"{args.command} {number}: {scenario.description}")
