@@ -41,10 +41,19 @@ inputs:
     description: Token that can write to dashboard-repo (the workflow token can't write other repos)
     default: ""
   checks:
-    description: "Comma list of checks to run: infrastructure (Terraform drift). More arrive with database support."
+    description: "Comma list of checks to run: infrastructure (Terraform drift) and/or database (Postgres schema drift)."
     default: infrastructure
   event-path:
     description: Optional CloudTrail event file (JSON). Adds "who changed it" to the findings on that resource.
+    default: ""
+  database-url:
+    description: "Database check: URL of the live Postgres database, for a READ-ONLY login. A secret: pass it from secrets, it is never printed."
+    default: ""
+  scratch-database-url:
+    description: "Database check: URL of a Postgres server where DriftPilot may create and drop its own scratch databases (a login with CREATEDB). A secret."
+    default: ""
+  migrations-dir:
+    description: "Database check: folder with the migration .sql files, relative to working-directory (default: migrations, or the config file's setting)."
     default: ""
 
 outputs:
@@ -72,7 +81,19 @@ runs:
       shell: bash
       env:
         ACTION_PATH: ${{ github.action_path }}
-      run: python -m pip install --quiet --disable-pip-version-check "$ACTION_PATH"
+      # [db] adds psycopg, which the database check needs.
+      run: python -m pip install --quiet --disable-pip-version-check "$ACTION_PATH[db]"
+
+    - name: Hide the database URLs from the logs
+      shell: bash
+      # The URLs are secrets; if one was passed as plain text, make GitHub mask it in every log line.
+      env:
+        DB_URL: ${{ inputs.database-url }}
+        SCRATCH_URL: ${{ inputs.scratch-database-url }}
+      run: |
+        for value in "$DB_URL" "$SCRATCH_URL"; do
+          if [ -n "$value" ]; then echo "::add-mask::$value"; fi
+        done
 
     - name: Scan for drift
       id: scan
@@ -91,5 +112,8 @@ runs:
         DRIFTPILOT_DASHBOARD_TOKEN: ${{ inputs.dashboard-token }}
         DRIFTPILOT_CHECKS: ${{ inputs.checks }}
         DRIFTPILOT_EVENT_PATH: ${{ inputs.event-path }}
+        DRIFTPILOT_DB_URL: ${{ inputs.database-url }}
+        DRIFTPILOT_SCRATCH_DB_URL: ${{ inputs.scratch-database-url }}
+        DRIFTPILOT_MIGRATIONS_DIR: ${{ inputs.migrations-dir }}
         GITHUB_TOKEN: ${{ inputs.provider-token }}
       run: driftpilot action

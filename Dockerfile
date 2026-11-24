@@ -25,8 +25,8 @@ RUN apt-get update \
 WORKDIR /opt/driftpilot
 COPY pyproject.toml README.md ./
 COPY driftpilot ./driftpilot
-# `aws` = boto3 for the AWS scanner. The `db` extra is added when database drift lands.
-RUN pip install --no-cache-dir ".[aws]"
+# `aws` = boto3 for the AWS scanner, `db` = psycopg for the Postgres schema check.
+RUN pip install --no-cache-dir ".[aws,db]"
 
 # Run as a normal user: the scan only needs to read the Terraform folder and call read-only APIs.
 RUN useradd --create-home --uid 10001 driftpilot

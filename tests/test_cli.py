@@ -389,6 +389,11 @@ def test_action_yml_has_the_new_inputs_and_keeps_the_old_ones() -> None:
           "dashboard-token"}  # fmt: skip
     assert v1 <= set(inputs)
     env = spec["runs"]["steps"][-1]["env"]
+    assert env["DRIFTPILOT_DB_URL"] == "${{ inputs.database-url }}"
+    assert env["DRIFTPILOT_SCRATCH_DB_URL"] == "${{ inputs.scratch-database-url }}"
+    assert env["DRIFTPILOT_MIGRATIONS_DIR"] == "${{ inputs.migrations-dir }}"
+    assert {"database-url", "scratch-database-url", "migrations-dir"} <= set(inputs)
+    assert all(inputs[name]["default"] == "" for name in ("database-url", "scratch-database-url"))
     assert env["DRIFTPILOT_CHECKS"] == "${{ inputs.checks }}"
     assert env["DRIFTPILOT_EVENT_PATH"] == "${{ inputs.event-path }}"
     assert {"drift-found", "critical-count", "finding-count", "unmanaged-count"} <= set(
