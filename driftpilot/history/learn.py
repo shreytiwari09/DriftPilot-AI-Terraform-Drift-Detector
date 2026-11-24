@@ -1,16 +1,17 @@
 """The "learn" step of a run: record history, update human outcomes, analyze, monitor, publish."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import pandas as pd
 
+from driftpilot.config import DashboardLinks
 from driftpilot.history.analytics import AnalyticsReport, analyze, episodes_frame
 from driftpilot.history.outcomes import update_outcomes
 from driftpilot.history.store import HistoryStore, records_from_scan
 from driftpilot.history.verdict_monitor import MonitorReport, alert_issue_body, monitor
-from driftpilot.models import RunRecord, ScanResult
-from driftpilot.report.dashboard import build_dashboard
+from driftpilot.models import AuditRecord, RunRecord, ScanResult
+from driftpilot.report.dashboard import build_site
 
 MONITOR_KEY = "verdict-monitor:review"
 
@@ -22,6 +23,7 @@ class Learned:
     episodes: pd.DataFrame
     outcomes_updated: int
     runs: list[RunRecord]
+    audit: list[AuditRecord] = field(default_factory=list)
     alert_url: str | None = None
 
 
@@ -43,7 +45,7 @@ def learn(
     report = analyze(events, runs)
     episodes = episodes_frame(events, runs)
     mon = monitor(episodes, report.period_end)  # history now has at least this run
-    learned = Learned(report, mon, episodes, updated, runs)
+    learned = Learned(report, mon, episodes, updated, runs, store.load_audit())
     if mon.breached and output is not None:
         learned.alert_url = output.alert(
             MONITOR_KEY,
@@ -54,10 +56,15 @@ def learn(
 
 
 def dashboard_files(
-    learned: Learned, title: str, note: str | None = None, publish_addresses: bool = True
+    learned: Learned,
+    title: str,
+    note: str | None = None,
+    publish_addresses: bool = True,
+    links: DashboardLinks | None = None,
+    llm_call_limit: int | None = 60,
 ) -> dict[str, str]:
-    """`index.html` and `data.json`, ready to publish or write to a folder."""
-    return build_dashboard(
+    """The app, `index.html` (data embedded) and `data.json`, ready to publish or write out."""
+    return build_site(
         learned.analytics,
         learned.monitor,
         learned.episodes,
@@ -65,11 +72,14 @@ def dashboard_files(
         title,
         note,
         publish_addresses,
+        learned.audit,
+        links,
+        llm_call_limit,
     )
 
 
 def publish_dashboard(files: dict[str, str], repo_name: str, token: str, message: str) -> str:
-    """Write each file (index.html, data.json) to the dashboard repo's default branch.
+    """Write each file (the app, index.html, data.json) to the dashboard repo's default branch.
 
     GitHub Pages serves it. Not run against GitHub by tests; they use a fake repo.
     """

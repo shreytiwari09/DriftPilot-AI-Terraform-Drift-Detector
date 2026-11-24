@@ -41,3 +41,15 @@ def test_both_modes_plant_the_same_episodes() -> None:
     split, _ = sim.simulate(seed=7, split=True)
     assert len(single) == len(split)
     assert {e.finding.id for e in single} == {e.finding.id for e in split}
+
+
+def test_simulated_audit_is_deterministic_and_has_guardrail_events() -> None:
+    events, runs = sim.simulate(seed=7, split=True)
+    audit = sim.simulate_audit(events, runs)
+    assert audit and audit == sim.simulate_audit(events, runs)
+    kinds = {g.kind for a in audit for g in a.guardrail_events}
+    assert {"never-soften", "suspicious-input"} <= kinds
+    per_run: dict[str, int] = {}
+    for a in audit:
+        per_run[a.run_id] = per_run.get(a.run_id, 0) + 1
+    assert max(per_run.values()) <= 60  # inside the default budget

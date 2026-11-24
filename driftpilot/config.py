@@ -88,8 +88,17 @@ class OwnershipConfig(BaseModel):
     repo: str | None = None  # default: $GITHUB_REPOSITORY
 
 
+class DashboardLinks(BaseModel):
+    """Where the dashboard's action links point. Unset values default to what history contains."""
+
+    repo: str | None = None  # "owner/name" of the repo that runs DriftPilot
+    workflow: str | None = None  # workflow file name, default "driftpilot.yml"
+    branch: str | None = None  # branch that holds .driftpilot.yml, default "main"
+
+
 class DashboardConfig(BaseModel):
     publish_addresses: bool = True  # false: resource addresses become stable hashes in data.json
+    links: DashboardLinks = DashboardLinks()
 
 
 class DatabaseConfig(BaseModel):

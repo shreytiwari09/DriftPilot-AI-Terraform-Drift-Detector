@@ -74,6 +74,8 @@ EPISODE_COLUMNS = [
     "finding_id", "address", "attribute", "resource_type", "start", "end", "resolved_at",
     "runs_seen", "severity", "category", "action", "source", "outcome", "resolved",
     "team", "repo", "environment", "account", "drift_type",
+    "reason", "controls", "guardrails", "confidence", "rule_id", "prompt_version", "pr_url",
+    "issue_url", "before", "after",
 ]  # fmt: skip
 
 
@@ -122,6 +124,8 @@ def _episode_row(fid: str, group: list[HistoryEvent], where: dict, stream: list[
     outcomes = {e.human_outcome for e in group} - {"pending"}
     index = where[last.run_id][1]
     resolved = index < len(stream) - 1
+    remediation = next((e.remediation for e in group if e.remediation), None)
+    links = (remediation.pr_url, remediation.issue_url) if remediation else (None, None)
     return {
         "finding_id": fid,
         "address": first.finding.address,
@@ -142,6 +146,16 @@ def _episode_row(fid: str, group: list[HistoryEvent], where: dict, stream: list[
         "environment": first.context.environment,
         "account": first.context.account,
         "drift_type": first.context.drift_type,
+        "reason": first.verdict.reason,
+        "controls": first.verdict.controls,
+        "guardrails": first.verdict.guardrails,
+        "confidence": first.verdict.confidence,
+        "rule_id": first.verdict.rule_id,
+        "prompt_version": first.verdict.prompt_version,
+        "pr_url": links[0],
+        "issue_url": links[1],
+        "before": first.finding.before,
+        "after": first.finding.after,
     }
 
 

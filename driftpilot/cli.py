@@ -143,10 +143,11 @@ def report(
     from driftpilot.history.store import LocalStore
     from driftpilot.history.verdict_monitor import monitor
     from driftpilot.report.console import print_history
-    from driftpilot.report.dashboard import build_dashboard
+    from driftpilot.report.dashboard import build_site
     from driftpilot.report.dashboard.data import episode_records, episodes_csv
 
-    publish_addresses = _load(Path("."), config).dashboard.publish_addresses
+    cfg = _load(Path("."), config)
+    publish_addresses = cfg.dashboard.publish_addresses
 
     store = LocalStore(history)
     events, runs = store.load_events(), store.load_runs()
@@ -165,11 +166,15 @@ def report(
         print_history(analytics, mon, console)
     if html is not None:
         html.mkdir(parents=True, exist_ok=True)
-        files = build_dashboard(
-            analytics, mon, episodes, runs, note=note, publish_addresses=publish_addresses
-        )
+        files = build_site(
+            analytics, mon, episodes, runs, note=note, publish_addresses=publish_addresses,
+            audit=store.load_audit(), links=cfg.dashboard.links,
+            llm_call_limit=cfg.limits.max_llm_calls,
+        )  # fmt: skip
         for name, text in files.items():
-            (html / name).write_text(text)
+            target = html / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(text, encoding="utf-8")
         console.print(f"[green]Dashboard written to {html / 'index.html'} (and data.json)[/]")
     if csv_file is not None:
         csv_file.parent.mkdir(parents=True, exist_ok=True)
@@ -392,7 +397,12 @@ def _learn_and_publish(
     dashboard_token = os.environ.get("DRIFTPILOT_DASHBOARD_TOKEN")
     if publish and dashboard_repo and dashboard_token:
         files = dashboard_files(
-            learned, f"DriftPilot — {output.repo.full_name}", None, cfg.dashboard.publish_addresses
+            learned,
+            f"DriftPilot — {output.repo.full_name}",
+            None,
+            cfg.dashboard.publish_addresses,
+            cfg.dashboard.links,
+            cfg.limits.max_llm_calls,
         )
         url = publish_dashboard(
             files, dashboard_repo, dashboard_token, f"Update dashboard ({result.run_id})"

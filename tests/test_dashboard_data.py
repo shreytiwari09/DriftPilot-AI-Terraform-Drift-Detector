@@ -182,3 +182,102 @@ def test_run_records_keep_the_last_run_of_each_day_per_stream() -> None:
         ("b", 5, "infra"),
         ("a", 12, "infra"),
     ]
+
+
+# --- action links, drawer fields and guardrail data ---
+
+
+def test_only_plain_github_links_survive() -> None:
+    from driftpilot.report.dashboard.data import safe_github_url
+
+    good = "https://github.com/acme/infra/pull/7"
+    assert safe_github_url(good) == good
+    for bad in (
+        "javascript:alert(1)", "data:text/html,<script>1</script>", "http://github.com/a/b",
+        "https://github.com.evil.io/a", "https://evil.io/github.com/a", "https://u:p@github.com/a",
+        "https://github.com:8443/a", 'https://github.com/a"onmouseover=x', "https://github.com/a b",
+        "//github.com/a", "", None, 42,
+    ):  # fmt: skip
+        assert safe_github_url(bad) is None, bad
+
+
+def frame_row(**kw) -> pd.DataFrame:
+    base = {
+        "finding_id": "f", "address": "docker_container.app3", "attribute": "memory",
+        "resource_type": "docker_container", "start": pd.Timestamp("2026-10-01T06:00:00Z"),
+        "end": pd.Timestamp("2026-10-01T06:00:00Z"), "resolved_at": pd.NaT, "runs_seen": 1,
+        "severity": "high", "category": "security", "action": "revert", "source": "llm",
+        "outcome": "pending", "resolved": False, "team": "t", "repo": "acme/infra",
+        "environment": "prod", "account": "unknown", "drift_type": "infrastructure",
+        "reason": "memory changed on docker_container.app3", "controls": ["least-privilege"],
+        "guardrails": ["never-soften"], "confidence": 0.9, "rule_id": None,
+        "prompt_version": "triage-v4", "pr_url": "javascript:alert(1)",
+        "issue_url": "https://github.com/acme/infra/issues/3", "before": 512, "after": 1024,
+    }  # fmt: skip
+    return pd.DataFrame([base | kw])
+
+
+def test_episode_records_carry_drawer_fields_and_drop_bad_links() -> None:
+    [rec] = episode_records(frame_row())
+    assert rec["prUrl"] is None  # javascript: dropped
+    assert rec["issueUrl"] == "https://github.com/acme/infra/issues/3"
+    assert rec["controls"] == ["least-privilege"] and rec["guardrails"] == ["never-soften"]
+    assert rec["promptVersion"] == "triage-v4" and rec["confidence"] == 0.9
+    assert rec["before"] == "512" and rec["after"] == "1024"
+    assert "terraform apply -target=docker_container.app3" in rec["fix"]
+    json.dumps(rec)
+
+
+def test_suggested_fix_only_for_revert_and_never_names_hidden_addresses() -> None:
+    [keep] = episode_records(frame_row(action="codify"))
+    assert keep["fix"] is None
+    [hidden] = episode_records(frame_row(), publish_addresses=False)
+    assert "app3" not in json.dumps(hidden)
+    [db] = episode_records(frame_row(address="postgres.public.users", drift_type="database"))
+    assert db["fix"].startswith("-- Review first") and "never changes a database" in db["fix"]
+
+
+def test_a_hostile_address_is_quoted_in_the_suggested_command() -> None:
+    [rec] = episode_records(frame_row(address="x; rm -rf ~"))
+    assert "-target='x; rm -rf ~'" in rec["fix"]
+
+
+def test_links_default_to_history_and_drop_bad_values() -> None:
+    from driftpilot.config import DashboardLinks
+    from driftpilot.report.dashboard.data import build_links
+
+    eps = [ep(repo="acme/infra"), ep(repo="acme/infra"), ep(repo="acme/db"), ep(repo="unknown")]
+    assert build_links(None, eps) == {
+        "repo": "acme/infra", "workflow": "driftpilot.yml", "branch": "main"
+    }  # fmt: skip
+    mine = DashboardLinks(repo="o/r", workflow="scan.yaml", branch="release/1")
+    assert build_links(mine, eps) == {"repo": "o/r", "workflow": "scan.yaml", "branch": "release/1"}
+    bad = DashboardLinks(repo="a/b/../c", workflow="x y.yml", branch="a..b")
+    assert build_links(bad, []) == {"repo": None, "workflow": None, "branch": None}
+    assert build_links(None, [ep(repo="unknown")])["repo"] is None
+
+
+def test_guardrail_data_counts_calls_and_events() -> None:
+    from datetime import UTC, datetime
+
+    from driftpilot.models import AuditRecord, GuardrailEvent, RunRecord
+    from driftpilot.report.dashboard.data import guardrail_data
+
+    t = datetime(2026, 10, 1, tzinfo=UTC)
+    runs = [
+        RunRecord(
+            run_id="r1", timestamp=t, working_dir="x", finding_count=0, critical_count=0,
+            distinct_resources=0, unmanaged_count=0, noise_count=0, repo="acme/infra",
+        )
+    ]  # fmt: skip
+    audit = [
+        AuditRecord(timestamp=t, run_id="r1", purpose="triage", model="m", prompt_sha256="a",
+                    valid=True, guardrail_events=[GuardrailEvent(kind="never-soften")]),
+        AuditRecord(timestamp=t, run_id="r1", purpose="triage", model="m", prompt_sha256="b"),
+    ]  # fmt: skip
+    data = guardrail_data(audit, runs, 60)
+    assert data["hasAudit"] and data["llmCallLimit"] == 60
+    [row] = data["runs"]
+    assert row["calls"] == 2 and row["invalid"] == 1 and row["events"] == {"never-soften": 1}
+    assert row["repo"] == "acme/infra"
+    assert guardrail_data(None, runs, None) == {"llmCallLimit": None, "hasAudit": False, "runs": []}

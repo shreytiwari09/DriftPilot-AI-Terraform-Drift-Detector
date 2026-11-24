@@ -103,6 +103,7 @@ def test_hostile_text_cannot_break_out_of_the_page() -> None:
 
 def test_page_has_no_dependency_besides_chartjs() -> None:
     page = files_for(EVENTS, RUNS)["index.html"]
+    page = re.sub(r'(<script id="embedded-data".*?</script>)', "", page, flags=re.S)  # data
     assert set(re.findall(r"https?://[^\s\"'<>)]+", page)) == {CHART_JS}
     assert "4.4.1" in CHART_JS
     for control in ("f-from", "f-to", "f-team", "f-repo", "f-environment", "f-driftType",

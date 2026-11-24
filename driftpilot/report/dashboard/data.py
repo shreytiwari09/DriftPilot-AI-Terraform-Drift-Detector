@@ -8,15 +8,20 @@ Percentages are 0-100 rounded to one decimal; hours too.
 import csv
 import hashlib
 import io
+import json
+import re
+import shlex
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
+from driftpilot.config import DashboardLinks
 from driftpilot.history.analytics import AnalyticsReport, stream_key
 from driftpilot.history.verdict_monitor import OVERRULE_ALERT, MonitorReport
-from driftpilot.models import RunRecord
+from driftpilot.models import AuditRecord, RunRecord
 from driftpilot.ownership import mask_ids
 
 SCHEMA = 1
@@ -50,6 +55,57 @@ def _safe(value: Any) -> Any:
     return mask_ids(value) if isinstance(value, str) else value
 
 
+def _text(value: Any, limit: int = 300) -> str | None:
+    """Short, masked text for the detail drawer (None stays None)."""
+    if value is None or (not isinstance(value, (list, dict, str)) and pd.isna(value)):
+        return None
+    text = value if isinstance(value, str) else json.dumps(value, default=str, sort_keys=True)
+    text = mask_ids(" ".join(text.split()))
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+GITHUB_URL = re.compile(r"https://github\.com(/[A-Za-z0-9._~/%#?&=+-]*)?")
+
+
+def safe_github_url(url: Any) -> str | None:
+    """`url` if it is a plain https://github.com link (no login part, port or odd characters).
+
+    Only these links ever become buttons on the page, so `javascript:` and look-alike hosts are
+    dropped here, and the page checks them again.
+    """
+    ok = isinstance(url, str) and len(url) <= 300 and GITHUB_URL.fullmatch(url)
+    return url if ok else None
+
+
+def suggested_fix(address: str, attribute: str | None, before: Any, drift_type: str) -> str:
+    """Text a person can copy to put a drifted setting back. DriftPilot never runs it."""
+    if drift_type == "database":
+        return (
+            "-- Review first, then run by hand with a role that may change the schema.\n"
+            "-- DriftPilot never changes a database.\n"
+            f"-- Object: {_text(address, 120)}\n"
+            f"-- Setting: {_text(attribute, 80) or 'the object itself'}\n"
+            f"-- Expected (from the migration files): {_text(before, 120)}"
+        )
+    return (
+        "# Review the plan first, then apply it yourself. DriftPilot never runs apply.\n"
+        f"terraform plan -target={shlex.quote(address)}\n"
+        f"terraform apply -target={shlex.quote(address)}"
+    )
+
+
+def _items(value: Any) -> list[str]:
+    return [str(v) for v in value] if isinstance(value, (list, tuple)) else []
+
+
+def _number(value: Any) -> float | None:
+    return None if value is None or pd.isna(value) else float(value)
+
+
+def _swap(text: Any, old: str, new: str) -> Any:
+    return text.replace(old, new) if isinstance(text, str) else text
+
+
 def episode_records(episodes: pd.DataFrame, publish_addresses: bool = True) -> list[dict]:
     """One dict per episode, camelCase, with account IDs and ARNs masked."""
     out = []
@@ -77,6 +133,21 @@ def episode_records(episodes: pd.DataFrame, publish_addresses: bool = True) -> l
                 "environment": _safe(row["environment"]),
                 "account": _safe(row["account"]),
                 "driftType": row["drift_type"],
+                "reason": _text(_swap(row.get("reason"), row["address"], address), 600),
+                "controls": _items(row.get("controls")),
+                "guardrails": _items(row.get("guardrails")),
+                "confidence": _number(row.get("confidence")),
+                "ruleId": row.get("rule_id") if isinstance(row.get("rule_id"), str) else None,
+                "promptVersion": row.get("prompt_version")
+                if isinstance(row.get("prompt_version"), str)
+                else None,
+                "prUrl": safe_github_url(row.get("pr_url")),
+                "issueUrl": safe_github_url(row.get("issue_url")),
+                "before": _text(row.get("before"), 160),
+                "after": _text(row.get("after"), 160),
+                "fix": suggested_fix(address, attribute, row.get("before"), row["drift_type"])
+                if row["action"] == "revert"
+                else None,
             }
         )
     return out
@@ -214,6 +285,60 @@ def compute_kpis(episodes: list[dict], runs: list[dict], f: dict, as_of: str | N
     }
 
 
+REPO_PATTERN = re.compile(r"[\w.-]+/[\w.-]+")
+WORKFLOW_PATTERN = re.compile(r"[\w.-]+\.ya?ml")
+BRANCH_PATTERN = re.compile(r"[\w][\w./-]*")
+DEFAULT_WORKFLOW, DEFAULT_BRANCH = "driftpilot.yml", "main"
+
+
+def build_links(configured: DashboardLinks | None, episodes: list[dict]) -> dict:
+    """The names behind the page's action buttons (repo, workflow file, branch), each checked.
+
+    The repo defaults to the one in most episodes. Values that fail their pattern become None, and
+    the page hides the buttons that need them. The page builds the GitHub URLs itself.
+    """
+    given = configured or DashboardLinks()
+    seen = Counter(e["repo"] for e in episodes if REPO_PATTERN.fullmatch(e["repo"] or ""))
+    repo = given.repo or (seen.most_common(1)[0][0] if seen else None)
+
+    def valid(value: str | None, pattern: re.Pattern) -> str | None:
+        return value if value and pattern.fullmatch(value) and ".." not in value else None
+
+    return {
+        "repo": valid(repo, REPO_PATTERN),
+        "workflow": valid(given.workflow or DEFAULT_WORKFLOW, WORKFLOW_PATTERN),
+        "branch": valid(given.branch or DEFAULT_BRANCH, BRANCH_PATTERN),
+    }
+
+
+def guardrail_data(
+    audit: list[AuditRecord] | None, runs: list[RunRecord], limit: int | None
+) -> dict:
+    """LLM calls and guardrail events per run, for the Guardrails page (empty without an audit)."""
+    where = {r.run_id: r for r in runs}
+    per_run: dict[str, dict] = {}
+    for a in sorted(audit or [], key=lambda a: a.timestamp):
+        run = where.get(a.run_id)
+        row = per_run.setdefault(
+            a.run_id,
+            {
+                "runId": a.run_id,
+                "t": iso(a.timestamp),
+                "repo": _safe(run.repo) if run else "unknown",
+                "environment": _safe(run.environment) if run else "unknown",
+                "driftType": run.drift_type if run else "infrastructure",
+                "calls": 0,
+                "invalid": 0,
+                "events": {},
+            },
+        )
+        row["calls"] += 1
+        row["invalid"] += not a.valid
+        for ev in a.guardrail_events:
+            row["events"][ev.kind] = row["events"].get(ev.kind, 0) + 1
+    return {"llmCallLimit": limit, "hasAudit": bool(audit), "runs": list(per_run.values())}
+
+
 def _analytics(report: AnalyticsReport, publish_addresses: bool) -> dict:
     anomaly_days = {a.day for a in report.day_anomalies}
     daily = report.daily_new_episodes
@@ -251,6 +376,9 @@ def build_data(
     note: str | None = None,
     publish_addresses: bool = True,
     generated: datetime | None = None,
+    audit: list[AuditRecord] | None = None,
+    links: DashboardLinks | None = None,
+    llm_call_limit: int | None = 60,
 ) -> dict:
     """Everything the page needs, as plain JSON-able values."""
     records = episode_records(episodes, publish_addresses)
@@ -269,6 +397,8 @@ def build_data(
         "runs": run_rows,
         "kpis": compute_kpis(records, run_rows, {}, as_of),
         "analytics": _analytics(report, publish_addresses),
+        "links": build_links(links, records),
+        "guardrails": guardrail_data(audit, runs, llm_call_limit),
         "monitor": {
             "alerts": monitor.alerts,
             "overruleThreshold": round(100 * OVERRULE_ALERT),

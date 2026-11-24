@@ -14,6 +14,7 @@ Seeded: the same seed gives the same history.
 """
 
 import argparse
+import hashlib
 import random
 import zlib
 from dataclasses import dataclass
@@ -23,8 +24,10 @@ from pathlib import Path
 from driftpilot.collector import finding_id
 from driftpilot.history.store import LocalStore
 from driftpilot.models import (
+    AuditRecord,
     Context,
     DriftFinding,
+    GuardrailEvent,
     HistoryEvent,
     RemediationResult,
     RunRecord,
@@ -147,8 +150,29 @@ class Episode:
     stream: Stream
 
 
+def _tags(fid: str, ep: Episode, source: str) -> tuple[list[str], list[str], str]:
+    """Compliance tags, guardrail marks and a note for a security finding.
+
+    Chosen from the finding id, not the random draws, so the planted patterns do not change.
+    """
+    if ep.category != "security":
+        return [], [], ""
+    controls = (
+        ["code-review"]
+        if ep.address.startswith("github_branch_protection")
+        else ["least-privilege"]
+    )
+    pick = zlib.crc32(fid.encode()) % 5 if source == "llm" else 99  # only LLM verdicts
+    if pick == 0:
+        return controls, ["never-soften"], " guardrail: never-soften (branch protection weakened)"
+    if pick == 1:
+        return controls, ["suspicious-input"], " guardrail: suspicious input (ignore previous)"
+    return controls, [], ""
+
+
 def _verdict(fid: str, ep: Episode, rng: random.Random) -> Verdict:
     source = "rule" if ep.category == "security" and rng.random() < 0.5 else "llm"
+    controls, guardrails, note = _tags(fid, ep, source)
     return Verdict(
         finding_id=fid,
         source=source,
@@ -159,8 +183,10 @@ def _verdict(fid: str, ep: Episode, rng: random.Random) -> Verdict:
         intent="likely_hotfix" if ep.category != "security" else "likely_accidental",
         recommended_action=ACTION[ep.category],
         confidence=round(rng.uniform(0.75, 0.95), 2),
-        reason=f"Simulated: {ep.attribute} on {ep.address} changed by hand.",
-        prompt_version="triage-v2" if source == "llm" else None,
+        reason=f"Simulated: {ep.attribute} on {ep.address} changed by hand.{note}",
+        prompt_version="triage-v4" if source == "llm" else None,
+        controls=controls,
+        guardrails=guardrails,
     )
 
 
@@ -282,6 +308,49 @@ def _event(ep: Episode, run_id: str, ts: datetime, rng: random.Random) -> Histor
     )
 
 
+def simulate_audit(events: list[HistoryEvent], runs: list[RunRecord]) -> list[AuditRecord]:
+    """One LLM call per 10 findings the model judged (at least one) in each run, with the
+    guardrail events of findings that appear for the first time. Hashes only, like the real log."""
+    by_run: dict[str, list[HistoryEvent]] = {}
+    for e in events:
+        by_run.setdefault(e.run_id, []).append(e)
+    previous: dict[tuple, set[str]] = {}
+    audit = []
+    for r in sorted(runs, key=lambda r: r.timestamp):
+        here = by_run.get(r.run_id, [])
+        key = (r.repo, r.environment, r.drift_type)
+        new = [e for e in here if e.finding.id not in previous.get(key, set())]
+        previous[key] = {e.finding.id for e in here}
+        judged = [e for e in new if e.verdict.source == "llm"]
+        for i in range(-(-len(judged) // 10)):  # ceil
+            batch = judged[i * 10 : (i + 1) * 10]
+            events_ = [
+                GuardrailEvent(
+                    kind=g,
+                    finding_id=e.finding.id,
+                    detail=e.verdict.reason.split("guardrail: ")[-1],
+                )
+                for e in batch
+                for g in e.verdict.guardrails
+            ]
+            digest = hashlib.sha256(f"{r.run_id}-{i}".encode()).hexdigest()
+            audit.append(
+                AuditRecord(
+                    run_id=r.run_id,
+                    timestamp=r.timestamp,
+                    purpose="triage",
+                    prompt_version="triage-v4",
+                    model="simulated",
+                    prompt_sha256=digest,
+                    response_sha256=digest[::-1],
+                    valid=zlib.crc32(digest.encode()) % 40 != 0,
+                    finding_ids=[e.finding.id for e in batch],
+                    guardrail_events=events_,
+                )
+            )
+    return audit
+
+
 def _poisson(rng: random.Random, lam: float) -> int:
     """Knuth's method; avoids a numpy dependency for one draw."""
     limit, k, p = 2.718281828459045**-lam, 0, 1.0
@@ -304,7 +373,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
     events, runs = simulate(args.days, args.seed, split=not args.single_stream)
-    LocalStore(args.out).save(events, runs, "simulated")
+    store = LocalStore(args.out)
+    store.save(events, runs, "simulated")
+    store.append_audit(simulate_audit(events, runs), "simulated")
     print(f"wrote {len(events)} events, {len(runs)} runs to {args.out}")
     print(
         f"planted: spike on day {SPIKE_DAY}, recurring {RECURRING}, "
