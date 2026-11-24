@@ -1660,7 +1660,7 @@
         ],
         "pred_real": true,
         "pred_severity": "medium",
-        "pred_action": "revert",
+        "pred_action": "investigate",
         "source": "llm",
         "never_soften": false,
         "benign": false
