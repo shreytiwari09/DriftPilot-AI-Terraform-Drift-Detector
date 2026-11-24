@@ -81,6 +81,44 @@ def phase3_analytics_check() -> list[str]:
     ]
 
 
+STABILITY_NOTE = (
+    "## Prompt stability\n\n"
+    "Not re-run for the current prompt (`triage-v4`) to save LLM quota. The last measurement, "
+    "on the earlier prompt `triage-v2` (5 repeats, 12 inputs, 12 LLM-judged findings), gave "
+    "100% identical severity and action."
+)
+
+AWS_BEFORE = (
+    "Before the AWS rules (rule pack at the start of version 2 phase 7, original 25 AWS cases, "
+    "rules only, measured then): severity right 16%, critical caught 36%, action right 16%."
+)
+
+
+def aws_rules_section(results: list[SetupResult]) -> list[str]:
+    """Rules-only (and rules + AI) scores on the AWS cases alone; no extra LLM calls."""
+    rows = []
+    for r in results:
+        if r.skipped or r.setup.name not in ("rules only", "rules + cloud LLM"):
+            continue
+        aws = SetupResult(r.setup, items=[i for i in r.items if i.case_id.startswith("aws-")])
+        m = aws.metrics()
+        rows.append(
+            f"| {r.setup.name} | {m['severity_accuracy']:.0%} | {m['critical_recall']:.0%} | "
+            f"{m['action_accuracy']:.0%} | {m['noise_reduction']:.0%} |"
+        )
+    return [
+        "## AWS cases only",
+        "",
+        "The `aws-*` cases (31 inputs) scored on their own, with the current rules.",
+        "",
+        "| Setup | Severity right | Critical caught | Action right | Noise filtered |",
+        "| --- | ---: | ---: | ---: | ---: |",
+        *rows,
+        "",
+        AWS_BEFORE,
+    ]
+
+
 LIVE = [
     "## Measured in live runs (demo environments)",
     "",
@@ -219,7 +257,10 @@ def main(argv: list[str] | None = None) -> None:
             results.append(SetupResult(setup, skipped=LOCAL_SKIP))
             continue
         llm = CachingLLM(inner, args.cache) if inner and setup.llm == "cloud" else None
-        results.append(run_setup(cases, setup, llm, ROOT, fixtures))
+        result = run_setup(cases, setup, llm, ROOT, fixtures)
+        if llm is not None and llm.errors:  # never publish numbers made of fallback verdicts
+            result = SetupResult(setup, skipped=f"stopped, {llm.errors[0]} (no results kept)")
+        results.append(result)
 
     stability = None
     if inner is not None and args.stability > 1:
@@ -248,7 +289,9 @@ def main(argv: list[str] | None = None) -> None:
         )
         database = database_markdown(database_cases, database_results)
 
-    extras = [*phase3_analytics_check(), "", *LIVE]
+    extras = [*aws_rules_section(results), "", *phase3_analytics_check(), "", *LIVE]
+    if args.stability <= 1:
+        extras = [STABILITY_NOTE, "", *extras]
     args.out.mkdir(parents=True, exist_ok=True)
     model = inner.model if inner else None
     (args.out / "summary.md").write_text(

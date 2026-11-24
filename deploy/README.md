@@ -36,7 +36,8 @@ A container started by a schedule has no checkout. Either build a small image of
 | Variable | What it is |
 | --- | --- |
 | `DRIFTPILOT_WORKING_DIRECTORY` | the Terraform folder inside the container (mount or clone it there) |
-| `DRIFTPILOT_CHECKS` | `infrastructure` (default). `database` arrives with the database solution |
+| `DRIFTPILOT_CHECKS` | `infrastructure` (default), `database` (Postgres schema drift) or both: `infrastructure,database` |
+| `DRIFTPILOT_DB_URL`, `DRIFTPILOT_SCRATCH_DB_URL` | **secrets** for the database check: a read-only login on the live database, and a login on a server where DriftPilot may create and drop its own `driftpilot_scratch_*` databases |
 | `DRIFTPILOT_EVENT_PATH` / `DRIFTPILOT_EVENT_JSON` | a CloudTrail event, as a file or as JSON text (who changed what) |
 | `DRIFTPILOT_MODE` | `advise` (issues only) or `open-prs` |
 | `DRIFTPILOT_LLM_API_KEY`, `DRIFTPILOT_GITHUB_TOKEN`, `GITHUB_TOKEN`, `GITHUB_REPOSITORY` | **secrets** and the repository to open issues in |
