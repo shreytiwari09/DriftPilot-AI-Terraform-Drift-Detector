@@ -1,0 +1,370 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.17.0",
+  "variables": {},
+  "planned_values": {
+    "root_module": {}
+  },
+  "resource_drift": [
+    {
+      "address": "azurerm_network_security_group.demo",
+      "mode": "managed",
+      "type": "azurerm_network_security_group",
+      "name": "demo",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-driftpilot-demo-a1b2c3d4/providers/Microsoft.Network/networkSecurityGroups/nsg-driftpilot-demo",
+          "location": "centralindia",
+          "name": "nsg-driftpilot-demo",
+          "resource_group_name": "rg-driftpilot-demo-a1b2c3d4",
+          "security_rule": [
+            {
+              "access": "Allow",
+              "description": "SSH from my laptop only",
+              "destination_address_prefix": "*",
+              "destination_address_prefixes": [],
+              "destination_application_security_group_ids": [],
+              "destination_port_range": "22",
+              "destination_port_ranges": [],
+              "direction": "Inbound",
+              "name": "ssh-from-my-ip",
+              "priority": 100,
+              "protocol": "Tcp",
+              "source_address_prefix": "203.0.113.7/32",
+              "source_address_prefixes": [],
+              "source_application_security_group_ids": [],
+              "source_port_range": "*",
+              "source_port_ranges": []
+            }
+          ],
+          "tags": {
+            "demo": "driftpilot",
+            "team": "platform"
+          },
+          "timeouts": null
+        },
+        "after": {
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-driftpilot-demo-a1b2c3d4/providers/Microsoft.Network/networkSecurityGroups/nsg-driftpilot-demo",
+          "location": "centralindia",
+          "name": "nsg-driftpilot-demo",
+          "resource_group_name": "rg-driftpilot-demo-a1b2c3d4",
+          "security_rule": [
+            {
+              "access": "Allow",
+              "description": "SSH from my laptop only",
+              "destination_address_prefix": "*",
+              "destination_address_prefixes": [],
+              "destination_application_security_group_ids": [],
+              "destination_port_range": "22",
+              "destination_port_ranges": [],
+              "direction": "Inbound",
+              "name": "ssh-from-my-ip",
+              "priority": 100,
+              "protocol": "Tcp",
+              "source_address_prefix": "203.0.113.7/32",
+              "source_address_prefixes": [],
+              "source_application_security_group_ids": [],
+              "source_port_range": "*",
+              "source_port_ranges": []
+            },
+            {
+              "access": "Allow",
+              "description": "SSH from my laptop only",
+              "destination_address_prefix": "*",
+              "destination_address_prefixes": [],
+              "destination_application_security_group_ids": [],
+              "destination_port_range": "22",
+              "destination_port_ranges": [],
+              "direction": "Inbound",
+              "name": "portal-ssh-any",
+              "priority": 110,
+              "protocol": "Tcp",
+              "source_address_prefix": "*",
+              "source_address_prefixes": [],
+              "source_application_security_group_ids": [],
+              "source_port_range": "*",
+              "source_port_ranges": []
+            }
+          ],
+          "tags": {
+            "demo": "driftpilot",
+            "team": "platform"
+          },
+          "timeouts": null
+        },
+        "after_unknown": {},
+        "before_sensitive": {
+          "security_rule": [
+            {
+              "destination_address_prefixes": [],
+              "destination_application_security_group_ids": [],
+              "destination_port_ranges": [],
+              "source_address_prefixes": [],
+              "source_application_security_group_ids": [],
+              "source_port_ranges": []
+            }
+          ],
+          "tags": {}
+        },
+        "after_sensitive": {
+          "security_rule": [
+            {
+              "destination_address_prefixes": [],
+              "destination_application_security_group_ids": [],
+              "destination_port_ranges": [],
+              "source_address_prefixes": [],
+              "source_application_security_group_ids": [],
+              "source_port_ranges": []
+            },
+            {
+              "destination_address_prefixes": [],
+              "destination_application_security_group_ids": [],
+              "destination_port_ranges": [],
+              "source_address_prefixes": [],
+              "source_application_security_group_ids": [],
+              "source_port_ranges": []
+            }
+          ],
+          "tags": {}
+        }
+      }
+    },
+    {
+      "address": "azurerm_storage_account.demo",
+      "mode": "managed",
+      "type": "azurerm_storage_account",
+      "name": "demo",
+      "provider_name": "registry.terraform.io/hashicorp/azurerm",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "access_tier": "Hot",
+          "account_kind": "StorageV2",
+          "account_replication_type": "LRS",
+          "account_tier": "Standard",
+          "allow_nested_items_to_be_public": false,
+          "allowed_copy_scope": "",
+          "cross_tenant_replication_enabled": false,
+          "default_to_oauth_authentication": false,
+          "dns_endpoint_type": "Standard",
+          "https_traffic_only_enabled": true,
+          "infrastructure_encryption_enabled": false,
+          "is_hns_enabled": false,
+          "large_file_share_enabled": false,
+          "local_user_enabled": true,
+          "location": "centralindia",
+          "min_tls_version": "TLS1_2",
+          "name": "dpdemoa1b2c3d4",
+          "nfsv3_enabled": false,
+          "primary_access_key": "REDACTED-BY-TERRAFORM-SENSITIVE-0",
+          "primary_blob_endpoint": "https://dpdemoa1b2c3d4.blob.core.windows.net/",
+          "primary_connection_string": "REDACTED-BY-TERRAFORM-SENSITIVE-1",
+          "public_network_access_enabled": true,
+          "queue_encryption_key_type": "Service",
+          "resource_group_name": "rg-driftpilot-demo-a1b2c3d4",
+          "secondary_access_key": "REDACTED-BY-TERRAFORM-SENSITIVE-2",
+          "sftp_enabled": false,
+          "shared_access_key_enabled": true,
+          "table_encryption_key_type": "Service",
+          "tags": {
+            "demo": "driftpilot",
+            "team": "platform"
+          },
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-driftpilot-demo-a1b2c3d4/providers/Microsoft.Storage/storageAccounts/dpdemoa1b2c3d4"
+        },
+        "after": {
+          "access_tier": "Hot",
+          "account_kind": "StorageV2",
+          "account_replication_type": "LRS",
+          "account_tier": "Standard",
+          "allow_nested_items_to_be_public": true,
+          "allowed_copy_scope": "",
+          "cross_tenant_replication_enabled": false,
+          "default_to_oauth_authentication": false,
+          "dns_endpoint_type": "Standard",
+          "https_traffic_only_enabled": false,
+          "infrastructure_encryption_enabled": false,
+          "is_hns_enabled": false,
+          "large_file_share_enabled": false,
+          "local_user_enabled": true,
+          "location": "centralindia",
+          "min_tls_version": "TLS1_0",
+          "name": "dpdemoa1b2c3d4",
+          "nfsv3_enabled": false,
+          "primary_access_key": "REDACTED-BY-TERRAFORM-SENSITIVE-0",
+          "primary_blob_endpoint": "https://dpdemoa1b2c3d4.blob.core.windows.net/",
+          "primary_connection_string": "REDACTED-BY-TERRAFORM-SENSITIVE-1",
+          "public_network_access_enabled": true,
+          "queue_encryption_key_type": "Service",
+          "resource_group_name": "rg-driftpilot-demo-a1b2c3d4",
+          "secondary_access_key": "REDACTED-BY-TERRAFORM-SENSITIVE-2",
+          "sftp_enabled": false,
+          "shared_access_key_enabled": true,
+          "table_encryption_key_type": "Service",
+          "tags": {
+            "demo": "driftpilot",
+            "team": "data-platform"
+          },
+          "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-driftpilot-demo-a1b2c3d4/providers/Microsoft.Storage/storageAccounts/dpdemoa1b2c3d4"
+        },
+        "after_unknown": {},
+        "before_sensitive": {
+          "primary_access_key": true,
+          "primary_connection_string": true,
+          "secondary_access_key": true,
+          "tags": {}
+        },
+        "after_sensitive": {
+          "primary_access_key": true,
+          "primary_connection_string": true,
+          "secondary_access_key": true,
+          "tags": {}
+        }
+      }
+    }
+  ],
+  "prior_state": {
+    "format_version": "1.0",
+    "terraform_version": "1.17.0",
+    "values": {
+      "root_module": {
+        "resources": [
+          {
+            "address": "azurerm_resource_group.demo",
+            "mode": "managed",
+            "type": "azurerm_resource_group",
+            "name": "demo",
+            "provider_name": "registry.terraform.io/hashicorp/azurerm",
+            "schema_version": 0,
+            "values": {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-driftpilot-demo-a1b2c3d4",
+              "location": "centralindia",
+              "managed_by": "",
+              "name": "rg-driftpilot-demo-a1b2c3d4",
+              "tags": {
+                "demo": "driftpilot",
+                "team": "platform"
+              },
+              "timeouts": null
+            },
+            "sensitive_values": {
+              "tags": {}
+            }
+          },
+          {
+            "address": "azurerm_network_security_group.demo",
+            "mode": "managed",
+            "type": "azurerm_network_security_group",
+            "name": "demo",
+            "provider_name": "registry.terraform.io/hashicorp/azurerm",
+            "schema_version": 0,
+            "values": {
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-driftpilot-demo-a1b2c3d4/providers/Microsoft.Network/networkSecurityGroups/nsg-driftpilot-demo",
+              "location": "centralindia",
+              "name": "nsg-driftpilot-demo",
+              "resource_group_name": "rg-driftpilot-demo-a1b2c3d4",
+              "security_rule": [
+                {
+                  "access": "Allow",
+                  "description": "SSH from my laptop only",
+                  "destination_address_prefix": "*",
+                  "destination_address_prefixes": [],
+                  "destination_application_security_group_ids": [],
+                  "destination_port_range": "22",
+                  "destination_port_ranges": [],
+                  "direction": "Inbound",
+                  "name": "ssh-from-my-ip",
+                  "priority": 100,
+                  "protocol": "Tcp",
+                  "source_address_prefix": "203.0.113.7/32",
+                  "source_address_prefixes": [],
+                  "source_application_security_group_ids": [],
+                  "source_port_range": "*",
+                  "source_port_ranges": []
+                }
+              ],
+              "tags": {
+                "demo": "driftpilot",
+                "team": "platform"
+              },
+              "timeouts": null
+            },
+            "sensitive_values": {
+              "security_rule": [
+                {}
+              ],
+              "tags": {}
+            }
+          },
+          {
+            "address": "azurerm_storage_account.demo",
+            "mode": "managed",
+            "type": "azurerm_storage_account",
+            "name": "demo",
+            "provider_name": "registry.terraform.io/hashicorp/azurerm",
+            "schema_version": 0,
+            "values": {
+              "access_tier": "Hot",
+              "account_kind": "StorageV2",
+              "account_replication_type": "LRS",
+              "account_tier": "Standard",
+              "allow_nested_items_to_be_public": false,
+              "allowed_copy_scope": "",
+              "cross_tenant_replication_enabled": false,
+              "default_to_oauth_authentication": false,
+              "dns_endpoint_type": "Standard",
+              "https_traffic_only_enabled": true,
+              "infrastructure_encryption_enabled": false,
+              "is_hns_enabled": false,
+              "large_file_share_enabled": false,
+              "local_user_enabled": true,
+              "location": "centralindia",
+              "min_tls_version": "TLS1_2",
+              "name": "dpdemoa1b2c3d4",
+              "nfsv3_enabled": false,
+              "primary_access_key": "REDACTED-BY-TERRAFORM-SENSITIVE-0",
+              "primary_blob_endpoint": "https://dpdemoa1b2c3d4.blob.core.windows.net/",
+              "primary_connection_string": "REDACTED-BY-TERRAFORM-SENSITIVE-1",
+              "public_network_access_enabled": true,
+              "queue_encryption_key_type": "Service",
+              "resource_group_name": "rg-driftpilot-demo-a1b2c3d4",
+              "secondary_access_key": "REDACTED-BY-TERRAFORM-SENSITIVE-2",
+              "sftp_enabled": false,
+              "shared_access_key_enabled": true,
+              "table_encryption_key_type": "Service",
+              "tags": {
+                "demo": "driftpilot",
+                "team": "platform"
+              },
+              "id": "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-driftpilot-demo-a1b2c3d4/providers/Microsoft.Storage/storageAccounts/dpdemoa1b2c3d4"
+            },
+            "sensitive_values": {
+              "primary_access_key": true,
+              "primary_connection_string": true,
+              "secondary_access_key": true,
+              "tags": {}
+            }
+          }
+        ]
+      }
+    }
+  },
+  "configuration": {
+    "provider_config": {
+      "azurerm": {
+        "name": "azurerm",
+        "full_name": "registry.terraform.io/hashicorp/azurerm"
+      }
+    },
+    "root_module": {}
+  },
+  "applyable": false,
+  "complete": true,
+  "errored": false
+}

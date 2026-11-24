@@ -37,6 +37,7 @@ CONTROL_TAGS = frozenset(
 )
 ADMIN_PORTS = (22, 3389)
 OPEN_CIDRS = {"0.0.0.0/0", "::/0"}
+AZURE_ANY_SOURCE = {"*", "0.0.0.0/0", "::/0", "internet", "any"}  # compared in lower case
 
 
 class RuleMatch(BaseModel):
@@ -143,15 +144,51 @@ def _has_open_admin_port(block: Any) -> bool:
     return any(from_port <= port <= to_port for port in ADMIN_PORTS)
 
 
+def _azure_port_covers_admin(port: Any) -> bool:
+    """Does an Azure port range ("22", "20-30", "*") include 22 or 3389?"""
+    text = str(port).strip()
+    if text == "*":
+        return True
+    low, _, high = text.partition("-")
+    try:
+        return any(int(low) <= p <= int(high or low) for p in ADMIN_PORTS)
+    except ValueError:
+        return False
+
+
+def _azure_rule_opens_admin_port(rule: Any) -> bool:
+    """Is this Azure NSG rule an inbound Allow, from anywhere, for TCP port 22 or 3389?
+
+    Anywhere is `*`, `0.0.0.0/0`, `Internet` or `Any`; the ports may be a range or `*`.
+    """
+    if not isinstance(rule, dict):
+        return False
+    if str(rule.get("direction", "")).lower() != "inbound":
+        return False
+    if str(rule.get("access", "")).lower() != "allow":
+        return False
+    if str(rule.get("protocol", "")).lower() not in ("tcp", "*"):
+        return False
+    sources = [rule.get("source_address_prefix"), *(rule.get("source_address_prefixes") or [])]
+    if not any(str(s).strip().lower() in AZURE_ANY_SOURCE for s in sources if s):
+        return False
+    ports = [rule.get("destination_port_range"), *(rule.get("destination_port_ranges") or [])]
+    return any(_azure_port_covers_admin(p) for p in ports if p not in (None, ""))
+
+
 def _open_cidr_on_admin_port(f: DriftFinding, _: Any, resource: Any) -> bool:
-    """Looks at the whole drifted resource, since port and CIDR are separate attributes."""
+    """Looks at the whole drifted resource, since port and CIDR are separate attributes.
+
+    Understands AWS security groups (`ingress`) and Azure network security groups (`security_rule`,
+    or a standalone `azurerm_network_security_rule`).
+    """
     if not isinstance(resource, dict):
         return False
-    if _has_open_admin_port(resource):  # standalone rule resources
-        return True
+    if _has_open_admin_port(resource) or _azure_rule_opens_admin_port(resource):
+        return True  # standalone rule resources
     root = (f.attribute_path or "").split("[")[0].split(".")[0]
-    blocks = resource.get(root) if root in ("ingress",) else None
-    return any(_has_open_admin_port(b) for b in blocks or [])
+    blocks = resource.get(root) if root in ("ingress", "security_rule") else None
+    return any(_has_open_admin_port(b) or _azure_rule_opens_admin_port(b) for b in blocks or [])
 
 
 def _policy_statements(document: Any) -> list[dict]:

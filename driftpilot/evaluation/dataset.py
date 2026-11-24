@@ -21,6 +21,7 @@ PROVIDERS = {
     "github": GITHUB_PROVIDER,
     "docker": DOCKER_PROVIDER,
     "aws": "registry.terraform.io/hashicorp/aws",
+    "azurerm": "registry.terraform.io/hashicorp/azurerm",
 }
 EVAL_TIME = datetime(2026, 10, 25, tzinfo=UTC)  # fixed, so prompts (and the LLM cache) are stable
 

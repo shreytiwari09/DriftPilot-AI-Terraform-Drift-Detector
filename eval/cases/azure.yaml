@@ -1,0 +1,258 @@
+# Azure-style resources (azurerm provider), hand-built plan JSON (no Azure account needed; detection reads plan JSON
+# the same way). They mirror the hand changes in demo/azure/RUNBOOK.md and a few look-alikes.
+# Labels written from the rubric in README.md before any configuration was scored.
+
+- id: azure-storage-blob-public-access-allowed
+  source: synthetic
+  code: |
+    resource "azurerm_storage_account" "demo" {
+      name                            = "dpdemoa1b2c3d4"
+      resource_group_name             = "rg-demo"
+      location                        = "centralindia"
+      account_tier                    = "Standard"
+      account_replication_type        = "LRS"
+      allow_nested_items_to_be_public = false
+    }
+  drift:
+    - address: azurerm_storage_account.demo
+      before: {name: dpdemoa1b2c3d4, account_tier: Standard, allow_nested_items_to_be_public: false}
+      after: {name: dpdemoa1b2c3d4, account_tier: Standard, allow_nested_items_to_be_public: true}
+  expect:
+    - attribute: allow_nested_items_to_be_public
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: azure-storage-secure-transfer-off
+  source: synthetic
+  code: |
+    resource "azurerm_storage_account" "demo" {
+      name                       = "dpdemoa1b2c3d4"
+      resource_group_name        = "rg-demo"
+      location                   = "centralindia"
+      account_tier               = "Standard"
+      account_replication_type   = "LRS"
+      https_traffic_only_enabled = true
+    }
+  drift:
+    - address: azurerm_storage_account.demo
+      before: {name: dpdemoa1b2c3d4, https_traffic_only_enabled: true}
+      after: {name: dpdemoa1b2c3d4, https_traffic_only_enabled: false}
+  expect:
+    - attribute: https_traffic_only_enabled
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: azure-storage-min-tls-lowered
+  source: synthetic
+  code: |
+    resource "azurerm_storage_account" "demo" {
+      name                     = "dpdemoa1b2c3d4"
+      resource_group_name      = "rg-demo"
+      location                 = "centralindia"
+      account_tier             = "Standard"
+      account_replication_type = "LRS"
+      min_tls_version          = "TLS1_2"
+    }
+  drift:
+    - address: azurerm_storage_account.demo
+      before: {name: dpdemoa1b2c3d4, min_tls_version: TLS1_2}
+      after: {name: dpdemoa1b2c3d4, min_tls_version: TLS1_0}
+  expect:
+    - attribute: min_tls_version
+      real: true
+      severity: high
+      action: [revert]
+
+- id: azure-storage-public-network-access-on
+  source: synthetic
+  code: |
+    resource "azurerm_storage_account" "data" {
+      name                          = "acmedata01"
+      resource_group_name           = "rg-data"
+      location                      = "centralindia"
+      account_tier                  = "Standard"
+      account_replication_type      = "LRS"
+      public_network_access_enabled = false
+    }
+  drift:
+    - address: azurerm_storage_account.data
+      before: {name: acmedata01, public_network_access_enabled: false}
+      after: {name: acmedata01, public_network_access_enabled: true}
+  expect:
+    - attribute: public_network_access_enabled
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: azure-nsg-ssh-rule-added-from-any
+  source: synthetic
+  code: |
+    resource "azurerm_network_security_group" "demo" {
+      name                = "nsg-demo"
+      location            = "centralindia"
+      resource_group_name = "rg-demo"
+      security_rule {
+        name                       = "ssh-from-my-ip"
+        priority                   = 100
+        direction                  = "Inbound"
+        access                     = "Allow"
+        protocol                   = "Tcp"
+        source_port_range          = "*"
+        destination_port_range     = "22"
+        source_address_prefix      = "203.0.113.7/32"
+        destination_address_prefix = "*"
+      }
+    }
+  drift:
+    - address: azurerm_network_security_group.demo
+      before:
+        name: nsg-demo
+        security_rule:
+          - {name: ssh-from-my-ip, priority: 100, direction: Inbound, access: Allow, protocol: Tcp, source_port_range: "*", destination_port_range: "22", source_address_prefix: 203.0.113.7/32, destination_address_prefix: "*"}
+      after:
+        name: nsg-demo
+        security_rule:
+          - {name: ssh-from-my-ip, priority: 100, direction: Inbound, access: Allow, protocol: Tcp, source_port_range: "*", destination_port_range: "22", source_address_prefix: 203.0.113.7/32, destination_address_prefix: "*"}
+          - {name: portal-ssh-any, priority: 110, direction: Inbound, access: Allow, protocol: Tcp, source_port_range: "*", destination_port_range: "22", source_address_prefix: "*", destination_address_prefix: "*"}
+  expect:
+    - attribute: security_rule
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: azure-nsg-rdp-source-widened-to-internet
+  source: synthetic
+  code: |
+    resource "azurerm_network_security_group" "win" {
+      name                = "nsg-win"
+      location            = "centralindia"
+      resource_group_name = "rg-demo"
+      security_rule {
+        name                       = "rdp-office"
+        priority                   = 100
+        direction                  = "Inbound"
+        access                     = "Allow"
+        protocol                   = "Tcp"
+        source_port_range          = "*"
+        destination_port_range     = "3389"
+        source_address_prefix      = "198.51.100.0/24"
+        destination_address_prefix = "*"
+      }
+    }
+  drift:
+    - address: azurerm_network_security_group.win
+      before:
+        name: nsg-win
+        security_rule:
+          - {name: rdp-office, priority: 100, direction: Inbound, access: Allow, protocol: Tcp, source_port_range: "*", destination_port_range: "3389", source_address_prefix: 198.51.100.0/24, destination_address_prefix: "*"}
+      after:
+        name: nsg-win
+        security_rule:
+          - {name: rdp-office, priority: 100, direction: Inbound, access: Allow, protocol: Tcp, source_port_range: "*", destination_port_range: "3389", source_address_prefix: Internet, destination_address_prefix: "*"}
+  expect:
+    - attribute: security_rule[0].source_address_prefix
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: azure-nsg-https-allowed-from-internet
+  source: synthetic
+  code: |
+    resource "azurerm_network_security_group" "web" {
+      name                = "nsg-web"
+      location            = "centralindia"
+      resource_group_name = "rg-demo"
+      security_rule {
+        name                       = "https-office"
+        priority                   = 100
+        direction                  = "Inbound"
+        access                     = "Allow"
+        protocol                   = "Tcp"
+        source_port_range          = "*"
+        destination_port_range     = "443"
+        source_address_prefix      = "198.51.100.0/24"
+        destination_address_prefix = "*"
+      }
+    }
+  drift:
+    - address: azurerm_network_security_group.web
+      before:
+        name: nsg-web
+        security_rule:
+          - {name: https-office, priority: 100, direction: Inbound, access: Allow, protocol: Tcp, source_port_range: "*", destination_port_range: "443", source_address_prefix: 198.51.100.0/24, destination_address_prefix: "*"}
+      after:
+        name: nsg-web
+        security_rule:
+          - {name: https-office, priority: 100, direction: Inbound, access: Allow, protocol: Tcp, source_port_range: "*", destination_port_range: "443", source_address_prefix: Internet, destination_address_prefix: "*"}
+  expect:
+    - attribute: security_rule[0].source_address_prefix
+      real: true
+      severity: high
+      action: [revert, investigate, codify]
+
+- id: azure-storage-tag-edited
+  source: synthetic
+  code: |
+    resource "azurerm_storage_account" "demo" {
+      name                     = "dpdemoa1b2c3d4"
+      resource_group_name      = "rg-demo"
+      location                 = "centralindia"
+      account_tier             = "Standard"
+      account_replication_type = "LRS"
+      tags = {
+        demo = "driftpilot"
+        team = "platform"
+      }
+    }
+  drift:
+    - address: azurerm_storage_account.demo
+      before: {name: dpdemoa1b2c3d4, tags: {demo: driftpilot, team: platform}}
+      after: {name: dpdemoa1b2c3d4, tags: {demo: driftpilot, team: data-platform}}
+  expect:
+    - attribute: tags.team
+      real: true
+      severity: low
+      action: [codify, ignore_changes]
+
+- id: azure-storage-secure-transfer-turned-on
+  source: synthetic
+  code: |
+    resource "azurerm_storage_account" "logs" {
+      name                       = "acmelogs01"
+      resource_group_name        = "rg-logs"
+      location                   = "centralindia"
+      account_tier               = "Standard"
+      account_replication_type   = "LRS"
+      https_traffic_only_enabled = false
+    }
+  drift:
+    - address: azurerm_storage_account.logs
+      before: {name: acmelogs01, https_traffic_only_enabled: false}
+      after: {name: acmelogs01, https_traffic_only_enabled: true}
+  expect:
+    - attribute: https_traffic_only_enabled
+      real: true
+      severity: medium
+      action: [codify, investigate, revert]
+
+- id: azure-storage-provider-fills-empty-default
+  source: synthetic
+  code: |
+    resource "azurerm_storage_account" "demo" {
+      name                     = "dpdemoa1b2c3d4"
+      resource_group_name      = "rg-demo"
+      location                 = "centralindia"
+      account_tier             = "Standard"
+      account_replication_type = "LRS"
+    }
+  drift:
+    - address: azurerm_storage_account.demo
+      before: {name: dpdemoa1b2c3d4, allowed_copy_scope: null}
+      after: {name: dpdemoa1b2c3d4, allowed_copy_scope: ""}
+  expect:
+    - attribute: allowed_copy_scope
+      real: false
+      severity: none
+      action: [none]

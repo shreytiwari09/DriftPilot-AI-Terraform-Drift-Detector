@@ -7,6 +7,7 @@
 # Predicates: null_to_default, list_reordered, json_equal, decreased,
 #             changed_to: <value>, open_cidr_on_admin_port, json_wildcard_principal, iam_wildcard,
 #             tags_all_mirrors_tags, pii_name, policy_loosened (the last two are for Postgres)
+#             (open_cidr_on_admin_port also reads Azure network security group rules)
 #
 # `controls:` (optional, on a rule or a never_soften entry) = DESCRIPTIVE compliance tags shown in issues and the
 # job summary: public-storage, network-exposure, least-privilege, encryption-at-rest, audit-logging, code-review,
@@ -430,6 +431,109 @@ rules:
       reason: The instance now has a public IP address and can be reached from the internet.
 
 
+  # ---------- Azure ----------
+  # Attribute names checked against the azurerm 4.x schema (`terraform providers schema -json`): on
+  # azurerm_storage_account they are allow_nested_items_to_be_public, https_traffic_only_enabled,
+  # min_tls_version and public_network_access_enabled; azurerm_network_security_group keeps its rules in the
+  # `security_rule` set. Not yet seen against a live Azure account. HTTPS-only and the TLS version protect data
+  # in transit; there is no in-transit tag, so they carry the closest existing one, encryption-at-rest.
+  - id: azure-storage-blob-public-access-on
+    description: Anonymous (public) access to blobs was allowed on a storage account.
+    controls: [public-storage]
+    match: { type: azurerm_storage_account, attribute: allow_nested_items_to_be_public, change_kind: modified }
+    when: { changed_to: true }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: Blob anonymous access was turned on, so containers in this account can be made readable by anyone on the internet.
+
+  - id: azure-public-network-access-on
+    description: A resource was opened to the public network.
+    controls: [network-exposure]
+    match: { type: "azurerm_*", attribute: public_network_access_enabled, change_kind: modified }
+    when: { changed_to: true }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: Public network access was turned on, so the resource can be reached from the internet.
+
+  - id: azure-storage-https-only-off
+    description: Secure transfer (HTTPS only) was turned off on a storage account.
+    controls: [encryption-at-rest]
+    match: { type: azurerm_storage_account, attribute: "*https_traffic_only*", change_kind: modified }
+    when: { changed_to: false }
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: Secure transfer is off, so the storage account accepts unencrypted HTTP requests.
+
+  - id: azure-nsg-admin-port-open
+    description: SSH (22) or RDP (3389) allowed from anywhere in a network security group.
+    controls: [network-exposure]
+    match: { type: "azurerm_network_security_*", attribute: "*" }
+    when: open_cidr_on_admin_port
+    verdict:
+      is_real_drift: true
+      severity: critical
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.95
+      reason: A network security group rule now allows an admin port (SSH or RDP) from anywhere (any, *, 0.0.0.0/0 or Internet).
+
+  - id: azure-storage-min-tls-1-0
+    description: Minimum TLS version of a storage account set to 1.0.
+    controls: [encryption-at-rest]
+    match: { type: azurerm_storage_account, attribute: min_tls_version, change_kind: modified }
+    when: { changed_to: TLS1_0 }
+    verdict:
+      is_real_drift: true
+      severity: high
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: The minimum TLS version is now 1.0, an outdated protocol with known weaknesses, so clients can connect with weak encryption.
+
+  - id: azure-storage-min-tls-1-1
+    description: Minimum TLS version of a storage account set to 1.1.
+    controls: [encryption-at-rest]
+    match: { type: azurerm_storage_account, attribute: min_tls_version, change_kind: modified }
+    when: { changed_to: TLS1_1 }
+    verdict:
+      is_real_drift: true
+      severity: high
+      category: security
+      intent: unknown
+      recommended_action: revert
+      confidence: 0.9
+      reason: The minimum TLS version is now 1.1, an outdated protocol, so clients can connect with weak encryption.
+
+  - id: azure-tags-edited
+    description: A tag on an Azure resource was added, changed or removed.
+    match: { type: "azurerm_*", attribute: "tags*", change_kind: modified }
+    verdict:
+      is_real_drift: true
+      severity: low
+      category: cosmetic
+      intent: unknown
+      recommended_action: codify
+      confidence: 0.85
+      reason: A tag was edited by hand. Tags are labels, so this is low risk; put the new value in the code or revert it.
+
+
   # ---------- Postgres (database schema drift) ----------
   # Resource types: pg_table, pg_column, pg_constraint, pg_index, pg_policy, pg_grant, pg_table_rls.
   # `before` is what the migration files build, `after` is the live database. change_kind `added`
@@ -743,6 +847,20 @@ never_soften:
   - { type: aws_cloudtrail, attribute: enable_logging, when: { changed_to: false },
       floor_severity: critical, reason: CloudTrail logging was turned off,
       controls: [audit-logging] }
+
+  # ---------- Azure ----------
+  - { type: azurerm_storage_account, attribute: allow_nested_items_to_be_public, when: { changed_to: true },
+      floor_severity: critical, reason: blob anonymous access was turned on,
+      controls: [public-storage] }
+  - { type: "azurerm_*", attribute: public_network_access_enabled, when: { changed_to: true },
+      floor_severity: critical, reason: public network access was turned on,
+      controls: [network-exposure] }
+  - { type: azurerm_storage_account, attribute: "*https_traffic_only*", when: { changed_to: false },
+      floor_severity: critical, reason: secure transfer (HTTPS only) was turned off,
+      controls: [encryption-at-rest] }
+  - { type: "azurerm_network_security_*", attribute: "*", when: open_cidr_on_admin_port,
+      floor_severity: critical, reason: an admin port is allowed from anywhere in a network security group,
+      controls: [network-exposure] }
 
   # ---------- Postgres ----------
   - { type: pg_table_rls, attribute: row_level_security, change_kind: modified, when: { changed_to: false },
