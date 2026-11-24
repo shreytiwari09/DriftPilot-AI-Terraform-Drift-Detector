@@ -61,7 +61,7 @@ def test_scan_without_guardrails_trusts_the_llm(tmp_path) -> None:
     result = run_scan(tmp_path, config, plan_json=plan, llm=llm)
     [v] = result.verdicts.values()
     assert v.is_real_drift is False and result.guardrail_events == []
-    assert llm.records[0].prompt_version == "triage-v2"
+    assert llm.records[0].prompt_version == "triage-v4-unguarded"
 
 
 def test_scan_open_admin_port_floor_uses_the_resource_context(tmp_path) -> None:

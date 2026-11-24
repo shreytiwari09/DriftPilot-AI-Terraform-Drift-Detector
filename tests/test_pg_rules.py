@@ -251,7 +251,7 @@ def llm_soft(fid: str) -> Verdict:
     return Verdict(
         finding_id=fid, source="llm", is_real_drift=False, severity="none", category="cosmetic",
         intent="likely_automation", recommended_action="none", confidence=0.95,
-        reason="The model thinks it is fine.", prompt_version="triage-v3",
+        reason="The model thinks it is fine.", prompt_version="triage-v4",
     )  # fmt: skip
 
 

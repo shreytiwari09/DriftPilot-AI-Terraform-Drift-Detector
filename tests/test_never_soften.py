@@ -134,7 +134,7 @@ def llm_verdict(fid: str, real=False, severity="none", action="none", source="ll
         recommended_action=action,
         confidence=0.95,
         reason="The model thinks it is fine.",
-        prompt_version="triage-v3",
+        prompt_version="triage-v4",
     )
 
 

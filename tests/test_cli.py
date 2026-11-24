@@ -116,7 +116,7 @@ def test_scan_uses_llm_for_undecided_findings() -> None:
     with patch("driftpilot.cli.build_llm", return_value=fake):
         result = runner.invoke(app, ["scan", "--plan-json", str(plan)])
     assert result.exit_code == 0, result.output
-    assert "codify" in result.output and "AI (triage-v3)" in result.output
+    assert "codify" in result.output and "AI (triage-v4)" in result.output
     assert len(fake.prompts) == 1
 
 
@@ -159,7 +159,7 @@ def test_scan_history_gets_an_audit_line_per_llm_call(tmp_path: Path) -> None:
         result = runner.invoke(app, ["scan", "--plan-json", str(plan), "--history", str(tmp_path)])
     assert result.exit_code == 0, result.output
     [record] = LocalStore(tmp_path).load_audit()
-    assert record.purpose == "triage" and record.prompt_version == "triage-v3" and record.valid
+    assert record.purpose == "triage" and record.prompt_version == "triage-v4" and record.valid
     assert "memory" not in record.model_dump_json()  # hashes only, never the prompt text
 
 
