@@ -474,3 +474,119 @@
       real: true
       severity: high
       action: [revert]
+
+# ---- Added in Phase 7 (labels from the rubric in README.md, written before any rule output was looked at) ----
+
+- id: aws-s3-bucket-policy-made-public
+  source: synthetic
+  code: |
+    resource "aws_s3_bucket_policy" "assets" {
+      bucket = "acme-assets"
+      policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow", Principal = { AWS = "arn:aws:iam::123456789012:role/cdn" }, Action = "s3:GetObject", Resource = "arn:aws:s3:::acme-assets/*" }] })
+    }
+  drift:
+    - address: aws_s3_bucket_policy.assets
+      before: {bucket: acme-assets, policy: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"arn:aws:iam::123456789012:role/cdn"},"Action":"s3:GetObject","Resource":"arn:aws:s3:::acme-assets/*"}]}'}
+      after: {bucket: acme-assets, policy: '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"arn:aws:s3:::acme-assets/*"}]}'}
+  expect:
+    - attribute: policy
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-ebs-encryption-off
+  source: synthetic
+  code: |
+    resource "aws_ebs_volume" "data" {
+      availability_zone = "eu-west-1a"
+      size              = 100
+      encrypted         = true
+    }
+  drift:
+    - address: aws_ebs_volume.data
+      before: {availability_zone: eu-west-1a, size: 100, encrypted: true}
+      after: {availability_zone: eu-west-1a, size: 100, encrypted: false}
+  expect:
+    - attribute: encrypted
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-rds-storage-encryption-off
+  source: synthetic
+  code: |
+    resource "aws_db_instance" "main" {
+      identifier        = "main"
+      instance_class    = "db.t3.medium"
+      storage_encrypted = true
+    }
+  drift:
+    - address: aws_db_instance.main
+      before: {identifier: main, storage_encrypted: true}
+      after: {identifier: main, storage_encrypted: false}
+  expect:
+    - attribute: storage_encrypted
+      real: true
+      severity: critical
+      action: [revert]
+
+- id: aws-tag-edit-also-shows-in-tags-all
+  source: synthetic
+  code: |
+    resource "aws_s3_bucket" "logs" {
+      bucket = "acme-logs"
+      tags = {
+        team = "platform"
+      }
+    }
+  drift:
+    - address: aws_s3_bucket.logs
+      before: {bucket: acme-logs, tags: {team: platform}, tags_all: {team: platform}}
+      after: {bucket: acme-logs, tags: {team: platform, cost-center: "1234"}, tags_all: {team: platform, cost-center: "1234"}}
+  expect:
+    - attribute: tags.cost-center
+      real: true
+      severity: low
+      action: [codify, ignore_changes]
+    - attribute: tags_all.cost-center
+      real: false
+      severity: none
+      action: [none]
+
+- id: aws-default-tag-changed-by-hand
+  source: synthetic
+  code: |
+    provider "aws" {
+      default_tags {
+        tags = { env = "prod" }
+      }
+    }
+    resource "aws_s3_bucket" "logs" {
+      bucket = "acme-logs"
+    }
+  drift:
+    - address: aws_s3_bucket.logs
+      before: {bucket: acme-logs, tags: {}, tags_all: {env: prod}}
+      after: {bucket: acme-logs, tags: {}, tags_all: {env: dev}}
+  expect:
+    - attribute: tags_all.env
+      real: true
+      severity: low
+      action: [codify, ignore_changes, revert]
+
+- id: aws-rds-restorable-time-advances
+  source: synthetic
+  code: |
+    resource "aws_db_instance" "main" {
+      identifier     = "main"
+      instance_class = "db.t3.medium"
+    }
+  drift:
+    - address: aws_db_instance.main
+      before: {identifier: main, latest_restorable_time: "2026-10-25T10:00:00Z"}
+      after: {identifier: main, latest_restorable_time: "2026-10-25T10:05:00Z"}
+  expect:
+    - attribute: latest_restorable_time
+      real: false
+      severity: none
+      action: [none]
