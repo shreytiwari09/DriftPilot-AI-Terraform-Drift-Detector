@@ -19,13 +19,13 @@ run "creates_only_the_three_demo_resources" {
   command = plan
 
   variables {
-    location        = "centralindia"
+    location        = "koreacentral"
     subscription_id = ""
     my_ip_cidr      = "198.51.100.9/32"
   }
 
   assert {
-    condition     = azurerm_resource_group.demo.name == "rg-driftpilot-demo-a1b2c3d4" && azurerm_resource_group.demo.location == "centralindia"
+    condition     = azurerm_resource_group.demo.name == "rg-driftpilot-demo-a1b2c3d4" && azurerm_resource_group.demo.location == "koreacentral"
     error_message = "the resource group name must start with rg-driftpilot-demo- (check-clean looks for it)"
   }
   assert {
@@ -58,13 +58,13 @@ run "location_can_be_changed" {
   command = plan
 
   variables {
-    location        = "southeastasia"
+    location        = "eastasia"
     subscription_id = ""
     my_ip_cidr      = "198.51.100.9/32"
   }
 
   assert {
-    condition     = azurerm_resource_group.demo.location == "southeastasia" && azurerm_storage_account.demo.location == "southeastasia" && azurerm_network_security_group.demo.location == "southeastasia"
+    condition     = azurerm_resource_group.demo.location == "eastasia" && azurerm_storage_account.demo.location == "eastasia" && azurerm_network_security_group.demo.location == "eastasia"
     error_message = "everything must follow var.location"
   }
 }
@@ -81,11 +81,23 @@ run "a_display_name_is_not_a_location" {
   expect_failures = [var.location]
 }
 
-run "the_whole_internet_is_rejected" {
+run "a_region_the_policy_does_not_allow_is_rejected" {
   command = plan
 
   variables {
     location        = "centralindia"
+    subscription_id = ""
+    my_ip_cidr      = "198.51.100.9/32"
+  }
+
+  expect_failures = [var.location]
+}
+
+run "the_whole_internet_is_rejected" {
+  command = plan
+
+  variables {
+    location        = "koreacentral"
     subscription_id = ""
     my_ip_cidr      = "0.0.0.0/0"
   }
@@ -97,7 +109,7 @@ run "a_star_is_rejected" {
   command = plan
 
   variables {
-    location        = "centralindia"
+    location        = "koreacentral"
     subscription_id = ""
     my_ip_cidr      = "*"
   }
@@ -109,7 +121,7 @@ run "a_wider_range_than_one_address_is_rejected" {
   command = plan
 
   variables {
-    location        = "centralindia"
+    location        = "koreacentral"
     subscription_id = ""
     my_ip_cidr      = "198.51.100.0/24"
   }
@@ -121,7 +133,7 @@ run "a_malformed_subscription_id_is_rejected" {
   command = plan
 
   variables {
-    location        = "centralindia"
+    location        = "koreacentral"
     subscription_id = "not-a-guid"
     my_ip_cidr      = "198.51.100.9/32"
   }

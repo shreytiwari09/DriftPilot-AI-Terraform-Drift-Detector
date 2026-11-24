@@ -94,9 +94,11 @@ def test_refuses_another_subscription_in_the_environment(sandbox) -> None:
     assert "terraform" not in sandbox.calls()
 
 
-def test_refuses_a_malformed_location(sandbox) -> None:
-    result = sandbox("plan", DEMO_LOCATION="Central India")
-    assert result.returncode != 0 and "lowercase region name" in result.stderr
+def test_refuses_a_location_the_policy_does_not_allow(sandbox) -> None:
+    for bad in ("Central India", "centralindia", "westeurope"):
+        result = sandbox("plan", DEMO_LOCATION=bad)
+        assert result.returncode != 0 and "Azure Policy" in result.stderr
+        assert "indiasouthcentral" in result.stderr  # the allowed list is shown
     assert sandbox.calls() == ""
 
 
@@ -104,18 +106,18 @@ def test_shows_subscription_and_location_and_passes_both_to_terraform(sandbox) -
     result = sandbox("plan")
     assert result.returncode == 0, result.stderr
     assert f"Subscription: Azure for Students ({SUB_ID})" in result.stdout
-    assert "Location: centralindia" in result.stdout
-    assert f"plan -var location=centralindia -input=false [ARM_SUBSCRIPTION_ID={SUB_ID}]" in (
+    assert "Location: koreacentral" in result.stdout
+    assert f"plan -var location=koreacentral -input=false [ARM_SUBSCRIPTION_ID={SUB_ID}]" in (
         sandbox.calls()
     )
 
 
 def test_location_can_come_from_terraform_tfvars_or_the_environment(sandbox) -> None:
     (sandbox.demo / "terraform.tfvars").write_text(
-        'my_ip_cidr = "198.51.100.9/32"\nlocation = "southeastasia"\n'
+        'my_ip_cidr = "198.51.100.9/32"\nlocation = "malaysiawest"\n'
     )
-    assert "Location: southeastasia" in sandbox("status").stdout
-    assert "Location: uaenorth" in sandbox("status", DEMO_LOCATION="uaenorth").stdout
+    assert "Location: malaysiawest" in sandbox("status").stdout
+    assert "Location: eastasia" in sandbox("status", DEMO_LOCATION="eastasia").stdout
 
 
 def test_plan_warns_when_a_service_is_not_registered(sandbox) -> None:
@@ -141,42 +143,42 @@ def test_apply_needs_the_location_typed(sandbox) -> None:
     result = sandbox("apply", stdin="yes\n")
     assert result.returncode != 0
     assert "not confirmed" in result.stderr
-    assert "type the location name (centralindia)" in result.stdout
+    assert "type the location name (koreacentral)" in result.stdout
     assert " apply " not in sandbox.calls()
     assert not list(sandbox.demo.glob("*.plan"))
 
 
 def test_apply_with_the_location_typed_runs_and_deletes_the_plan_file(sandbox) -> None:
-    result = sandbox("apply", stdin="centralindia\n")
+    result = sandbox("apply", stdin="koreacentral\n")
     assert result.returncode == 0, result.stderr
     assert " apply " in sandbox.calls()
     assert not list(sandbox.demo.glob("*.plan"))
 
 
 def test_apply_confirms_the_other_location_when_one_is_chosen(sandbox) -> None:
-    refused = sandbox("apply", DEMO_LOCATION="uaenorth", stdin="centralindia\n")
+    refused = sandbox("apply", DEMO_LOCATION="eastasia", stdin="koreacentral\n")
     assert refused.returncode != 0 and "not confirmed" in refused.stderr
     assert " apply " not in sandbox.calls()
-    ok = sandbox("apply", DEMO_LOCATION="uaenorth", stdin="uaenorth\n")
+    ok = sandbox("apply", DEMO_LOCATION="eastasia", stdin="eastasia\n")
     assert ok.returncode == 0, ok.stderr
-    assert "-var location=uaenorth" in sandbox.calls()
+    assert "-var location=eastasia" in sandbox.calls()
 
 
 def test_destroy_refuses_when_there_is_no_demo_group(sandbox) -> None:
-    result = sandbox("destroy", stdin="centralindia\n")
+    result = sandbox("destroy", stdin="koreacentral\n")
     assert result.returncode != 0 and "nothing to destroy" in result.stderr
     assert "-destroy" not in sandbox.calls()
 
 
 def test_destroy_needs_the_location_typed(sandbox) -> None:
-    result = sandbox("destroy", stdin="uaenorth\n", **GROUP)
+    result = sandbox("destroy", stdin="eastasia\n", **GROUP)
     assert result.returncode != 0 and "not confirmed" in result.stderr
-    assert "destroy -var location=centralindia -input=false -auto-approve" not in sandbox.calls()
+    assert "destroy -var location=koreacentral -input=false -auto-approve" not in sandbox.calls()
 
 
 def test_destroy_runs_after_confirmation_and_reports_what_is_left(sandbox) -> None:
-    result = sandbox("destroy", stdin="centralindia\n", **GROUP)
-    assert "destroy -var location=centralindia -input=false -auto-approve" in sandbox.calls()
+    result = sandbox("destroy", stdin="koreacentral\n", **GROUP)
+    assert "destroy -var location=koreacentral -input=false -auto-approve" in sandbox.calls()
     assert "NOT CLEAN" in result.stdout  # the stand-in `az` still lists the group
     assert result.returncode == 1
 

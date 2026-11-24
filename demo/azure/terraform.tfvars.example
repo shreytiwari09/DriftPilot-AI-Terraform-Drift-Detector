@@ -7,10 +7,11 @@
 # 0.0.0.0/0 and * are refused on purpose.
 my_ip_cidr = "203.0.113.7/32"
 
-# Where everything is created. Azure for Students limits which regions you may use (an Azure Policy), so if apply says
-# the region is not allowed, change this to a region listed as allowed (README.md, "Check your subscription").
-# Short lowercase name, for example centralindia, southeastasia, uaenorth, westeurope. scripts/azure_demo.sh asks you to type it.
-# location = "centralindia"
+# Where everything is created. Your subscription's Azure Policy "Allowed resource deployment regions" (set by Azure for
+# Students, not by this demo) allows only these five, and Terraform refuses any other:
+#   koreacentral (default), indiasouthcentral, eastasia, malaysiawest, indonesiacentral
+# scripts/azure_demo.sh asks you to type the region name before apply and destroy.
+# location = "koreacentral"
 
 # Optional. Leave unset: scripts/azure_demo.sh takes the subscription your `az login` session is using.
 # subscription_id = "00000000-0000-0000-0000-000000000000"

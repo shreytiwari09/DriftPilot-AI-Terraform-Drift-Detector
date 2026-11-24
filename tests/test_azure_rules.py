@@ -276,3 +276,22 @@ def test_azure_never_soften_entries_are_critical_and_have_tags() -> None:
 def test_azure_rule_ids_are_unique_and_prefixed() -> None:
     ids = [r.id for r in RULES if r.match.type.startswith("azurerm_")]
     assert len(ids) == len(set(ids)) == 7 and all(i.startswith("azure-") for i in ids)
+
+
+# ---- The scan command on a recorded Azure plan (no Azure, no Terraform) ----
+
+
+def test_scan_command_replays_the_azure_plan_with_the_demo_config() -> None:
+    from typer.testing import CliRunner
+
+    from driftpilot.cli import app
+
+    demo = Path(__file__).parents[1] / "demo" / "azure"
+    args = ["scan", "--dir", str(demo), "--no-llm", "--json"]
+    result = CliRunner().invoke(app, [*args, "--plan-json", str(FIXTURES / "portal_changes.json")])
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    severities = sorted(v["severity"] for v in data["verdicts"].values())
+    assert severities == ["critical", "critical", "critical", "high", "low"]
+    clean = CliRunner().invoke(app, [*args, "--plan-json", str(FIXTURES / "no_drift.json")])
+    assert clean.exit_code == 0 and json.loads(clean.stdout)["findings"] == []

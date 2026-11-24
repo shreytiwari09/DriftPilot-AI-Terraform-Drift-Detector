@@ -9,13 +9,14 @@
 #
 # You must be logged in first:  az login   (a browser window opens; use the student account).
 # The demo is one resource group with a storage account and a network security group in it. The location comes from
-# DEMO_LOCATION, else `location = "..."` in demo/azure/terraform.tfvars, else centralindia. `apply` and `destroy` print
+# DEMO_LOCATION, else `location = "..."` in demo/azure/terraform.tfvars, else koreacentral. `apply` and `destroy` print
 # the subscription and the location and wait for you to type the location name.
 set -euo pipefail
 
 LOCATION=""    # set by resolve_location
 SUB_NAME=""    # set by show_identity
 SUB_ID=""      # set by show_identity
+ALLOWED_LOCATIONS="koreacentral indiasouthcentral eastasia malaysiawest indonesiacentral" # the policy's list
 RG_PREFIX="rg-driftpilot-demo-"
 STORAGE_PREFIX="dpdemo"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,15 +33,15 @@ usage() {
   exit "${1:-1}"
 }
 
-# The location comes from DEMO_LOCATION, else from `location = "..."` in terraform.tfvars, else centralindia.
+# The location comes from DEMO_LOCATION, else from `location = "..."` in terraform.tfvars, else koreacentral.
 resolve_location() {
   local file="${DEMO_DIR}/terraform.tfvars"
   LOCATION="${DEMO_LOCATION:-}"
   if [[ -z "${LOCATION}" && -f "${file}" ]]; then
     LOCATION="$(sed -n 's/^[[:space:]]*location[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "${file}" | tail -n 1)"
   fi
-  LOCATION="${LOCATION:-centralindia}"
-  [[ "${LOCATION}" =~ ^[a-z0-9]+$ ]] || die "location '${LOCATION}' must be a short lowercase region name such as centralindia (see 'az account list-locations -o table')."
+  LOCATION="${LOCATION:-koreacentral}"
+  [[ " ${ALLOWED_LOCATIONS} " == *" ${LOCATION} "* ]] || die "location '${LOCATION}' is not allowed by this subscription's Azure Policy. Use one of: ${ALLOWED_LOCATIONS}."
 }
 
 require_safe_environment() {
@@ -163,7 +164,7 @@ show_registration() {
     state="$(az provider show --namespace "${namespace}" --query registrationState --output tsv 2>/dev/null)" || state="unknown"
     echo "Service ${namespace}: ${state:-unknown}"
     if [[ "${state}" != "Registered" ]]; then
-      echo "  note: if apply says the service is not registered, run:  az provider register --namespace ${namespace}" >&2
+      echo "  note: Terraform registers it on the first plan or apply (one time). Or do it now:  az provider register --namespace ${namespace}" >&2
     fi
   done
 }

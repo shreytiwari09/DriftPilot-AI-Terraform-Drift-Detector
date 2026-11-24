@@ -1,11 +1,11 @@
 variable "location" {
-  description = "Azure region for everything. Azure for Students limits which regions you may use (an Azure Policy), so if apply says the region is not allowed, change it here to a region the Subscriptions page lists. See README.md."
+  description = "Azure region for everything. This subscription's Azure Policy \"Allowed resource deployment regions\" (set by Azure for Students, not by this demo) allows only koreacentral, indiasouthcentral, eastasia, malaysiawest and indonesiacentral, so only those are accepted here. See README.md."
   type        = string
-  default     = "centralindia"
+  default     = "koreacentral"
 
   validation {
-    condition     = can(regex("^[a-z0-9]+$", var.location))
-    error_message = "location is the short region name in lowercase, for example centralindia (not \"Central India\")."
+    condition     = contains(["koreacentral", "indiasouthcentral", "eastasia", "malaysiawest", "indonesiacentral"], var.location)
+    error_message = "location must be one of the regions the subscription's Azure Policy allows: koreacentral, indiasouthcentral, eastasia, malaysiawest, indonesiacentral (short lowercase names, not \"Korea Central\")."
   }
 }
 
