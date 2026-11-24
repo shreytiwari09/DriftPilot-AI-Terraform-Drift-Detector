@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 245 247 251;
+  --surface: 255 255 255;
+  --sunken: 238 242 247;
+  --line: 226 232 240;
+  --ink: 15 23 42;
+  --mute: 91 102 120;
+  --brand: 31 111 235;
+  --teal: 13 148 136;
+  --crit: 220 38 38;
+  --high: 234 88 12;
+  --med: 161 98 7;
+  --low: 71 85 105;
+  --ok: 21 128 61;
+  --shadow: 15 23 42;
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  --bg: 8 13 24;
+  --surface: 17 26 43;
+  --sunken: 12 20 34;
+  --line: 36 48 73;
+  --ink: 230 237 247;
+  --mute: 148 163 184;
+  --brand: 91 155 255;
+  --teal: 45 212 191;
+  --crit: 248 113 113;
+  --high: 251 146 60;
+  --med: 251 191 36;
+  --low: 148 163 184;
+  --ok: 74 222 128;
+  --shadow: 0 0 0;
+  color-scheme: dark;
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body { @apply bg-bg font-sans text-ink antialiased; font-feature-settings: 'cv11', 'ss01'; }
+  :focus-visible { outline: 2px solid rgb(var(--brand)); outline-offset: 2px; border-radius: 6px; }
+  ::selection { background: rgb(var(--brand) / 0.25); }
+}
+
+@layer components {
+  .card { @apply rounded-2xl border border-line bg-surface shadow-card; }
+  .btn {
+    @apply inline-flex min-h-[36px] items-center justify-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink transition
+      hover:border-brand/50 hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary { @apply border-transparent bg-brand text-white hover:bg-brand/90 hover:border-transparent; }
+  :root[data-theme='dark'] .btn-primary { color: #06101f; }
+  .field {
+    @apply min-h-[36px] w-full rounded-lg border border-line bg-surface px-2.5 text-sm text-ink placeholder:text-mute/70;
+  }
+  .label { @apply mb-1 block text-[11px] font-semibold uppercase tracking-wide text-mute; }
+  .chip { @apply inline-flex whitespace-nowrap items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium; }
+  .h-page { @apply text-2xl font-semibold tracking-tight; }
+  .h-card { @apply text-sm font-semibold; }
+}
+
+.fade-up { animation: fade-up 0.35s ease-out both; }
+.slide-in { animation: slide-in 0.25s ease-out both; }
+.fade-in { animation: fade-in 0.2s ease-out both; }
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes slide-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .fade-up, .slide-in, .fade-in { animation: none; }
+  * { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
+}
+.recharts-wrapper:focus, .recharts-surface:focus { outline: none; }
+.scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }

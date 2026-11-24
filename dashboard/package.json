@@ -1,0 +1,32 @@
+{
+  "name": "driftpilot-dashboard",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "test": "vitest run",
+    "preview": "vite preview",
+    "build:app": "npm run build && node scripts/sync-app.mjs",
+    "demo-data": "../.venv/bin/python ../scripts/simulate_history.py --out dev-data/history && ../.venv/bin/driftpilot report --history dev-data/history --html dev-data/site && cp dev-data/site/data.json dev-data/data.json",
+    "fixture": "../.venv/bin/python scripts/make_fixture.py"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.15.4"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^18.3.31",
+    "@types/react-dom": "^18.3.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "^10.7.0",
+    "postcss": "^8.5.33",
+    "tailwindcss": "^3.4.19",
+    "typescript": "5.6",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.9"
+  }
+}

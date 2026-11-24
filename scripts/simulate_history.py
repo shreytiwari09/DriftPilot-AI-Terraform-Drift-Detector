@@ -309,7 +309,7 @@ def _event(ep: Episode, run_id: str, ts: datetime, rng: random.Random) -> Histor
 
 
 def simulate_audit(events: list[HistoryEvent], runs: list[RunRecord]) -> list[AuditRecord]:
-    """One LLM call per 10 findings the model judged (at least one) in each run, with the
+    """One LLM call per 2 findings the model judged (at least one) in each run, with the
     guardrail events of findings that appear for the first time. Hashes only, like the real log."""
     by_run: dict[str, list[HistoryEvent]] = {}
     for e in events:
@@ -322,8 +322,8 @@ def simulate_audit(events: list[HistoryEvent], runs: list[RunRecord]) -> list[Au
         new = [e for e in here if e.finding.id not in previous.get(key, set())]
         previous[key] = {e.finding.id for e in here}
         judged = [e for e in new if e.verdict.source == "llm"]
-        for i in range(-(-len(judged) // 10)):  # ceil
-            batch = judged[i * 10 : (i + 1) * 10]
+        for i in range(-(-len(judged) // 2)):  # ceil
+            batch = judged[i * 2 : (i + 1) * 2]
             events_ = [
                 GuardrailEvent(
                     kind=g,
