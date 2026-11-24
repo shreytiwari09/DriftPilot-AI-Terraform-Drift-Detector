@@ -1,11 +1,12 @@
-# DriftPilot settings for the real-AWS demo (see README.md and RUNBOOK.md). No keys here: DriftPilot uses
-# your AWS profile (export AWS_PROFILE=driftpilot-demo), the same one Terraform uses.
+# DriftPilot settings for the real-AWS demo, "s3" scope (the default; see README.md and RUNBOOK.md).
+# No keys here: DriftPilot uses your AWS profile (export AWS_PROFILE=driftpilot-readonly), like Terraform does.
+# For the "full" scope (later) use .driftpilot.full.yml: driftpilot scan --dir demo/aws --config demo/aws/.driftpilot.full.yml
 scanners:
   aws:
-    region: ap-south-1
+    region: us-east-1
     # Only look at demo resources. The IAM user names in README.md (dp-demo-*) are outside this pattern on purpose.
     include_names: ["driftpilot-demo*"]
-    resource_types: [s3_bucket, security_group, iam_user]
+    resource_types: [s3_bucket]
 mode: advise          # issues only: nothing is merged or applied. DriftPilot never runs terraform apply.
 ownership:
   default_team: platform

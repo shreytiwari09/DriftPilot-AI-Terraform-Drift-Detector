@@ -8,6 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 DEMO = ROOT / "demo" / "aws"
 MAIN = (DEMO / "main.tf").read_text()
+VARIABLES = (DEMO / "variables.tf").read_text()
 POLICIES = ["iam-policy-demo-operator.json", "iam-policy-driftpilot-readonly.json"]
 WRITE_VERBS = ("Create", "Delete", "Put", "Modify", "Authorize", "Revoke", "Add", "Remove", "Tag")
 
@@ -41,7 +42,7 @@ def test_database_settings_are_the_cheap_and_clean_up_friendly_ones() -> None:
         "storage_encrypted = true",
     ):
         assert line in MAIN, line
-    assert 'default     = "db.t4g.micro"' in (DEMO / "variables.tf").read_text()
+    assert 'default     = "db.t4g.micro"' in VARIABLES
 
 
 def test_every_resource_that_can_be_tagged_is_tagged_with_the_demo_tag() -> None:
@@ -53,11 +54,48 @@ def test_every_resource_that_can_be_tagged_is_tagged_with_the_demo_tag() -> None
 
 def test_the_security_group_cannot_be_opened_to_the_world_by_the_variable() -> None:
     variables = (DEMO / "variables.tf").read_text()
-    assert (
-        'var.my_ip_cidr != "0.0.0.0/0"' in variables
-        and 'endswith(var.my_ip_cidr, "/32")' in variables
-    )
+    assert 'var.my_ip_cidr != "0.0.0.0/0"' in variables
+    assert 'endswith(var.my_ip_cidr, "/32")' in variables
     assert "0.0.0.0/0" not in MAIN  # the only mention is the variable's rejection message
+
+
+def test_only_the_bucket_is_created_without_a_count_guard() -> None:
+    """The "s3" scope must create the bucket resources only; everything else is full-scope only."""
+    always = {
+        "random_id", "aws_s3_bucket", "aws_s3_bucket_public_access_block",
+        "aws_s3_bucket_versioning", "aws_s3_bucket_server_side_encryption_configuration",
+    }  # fmt: skip
+    guarded = {
+        "aws_security_group": "local.full ? 1 : 0",
+        "aws_db_instance": "local.full ? 1 : 0",
+        "random_password": "local.full ? 1 : 0",
+        "aws_budgets_budget": "local.full && var.enable_budget_guard ? 1 : 0",
+    }
+    for kind in re.findall(r'^resource "(\w+)"', MAIN, flags=re.M):
+        if kind in always:
+            continue
+        block = re.search(rf'resource "{kind}" "\w+" \{{(.*?)\n\}}\n', MAIN, flags=re.S).group(1)
+        assert f"count = {guarded[kind]}" in block, kind
+    vpc = re.search(r'data "aws_vpc" "default" \{(.*?)\n\}\n', MAIN, flags=re.S).group(1)
+    assert "count = local.full ? 1 : 0" in vpc
+    assert 'default     = "s3"' in VARIABLES  # the default scope is the bucket only
+
+
+def test_each_scope_has_its_own_region_and_the_provider_follows_it() -> None:
+    assert 'scope_region = local.full ? "ap-south-1" : "us-east-1"' in MAIN
+    assert "region = local.region" in (DEMO / "versions.tf").read_text()
+    assert "local.region == local.scope_region" in MAIN  # any other region is refused
+
+
+def test_full_scope_needs_an_ip_and_the_s3_scope_does_not() -> None:
+    assert 'var.my_ip_cidr != ""' in MAIN  # precondition on the security group
+    assert re.search(r'variable "my_ip_cidr" \{.*?default\s+= ""', VARIABLES, flags=re.S)
+
+
+def test_offline_terraform_test_covers_both_scopes() -> None:
+    text = (DEMO / "tests" / "scope.tftest.hcl").read_text()
+    assert 'mock_provider "aws"' in text  # no AWS call, no credentials
+    assert 'demo_scope = "full"' in text and 'demo_scope = "s3"' in text
 
 
 def test_bucket_has_all_four_public_access_flags_on() -> None:

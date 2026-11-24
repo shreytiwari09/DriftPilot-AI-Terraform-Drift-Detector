@@ -15,7 +15,7 @@ terraform {
 }
 
 provider "aws" {
-  region = var.region
+  region = local.region
 
   # Credentials are NOT written here. Terraform reads them from the profile you export
   # (AWS_PROFILE=driftpilot-demo), the same way the AWS CLI does. See README.md.

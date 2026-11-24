@@ -1,15 +1,27 @@
-variable "region" {
-  description = "AWS region for everything in this demo (ap-south-1 is Mumbai). The helper scripts and IAM policies assume this region."
+variable "demo_scope" {
+  description = "What the demo creates. \"s3\" (the default): one S3 bucket in us-east-1, nothing else. \"full\": the bucket plus a security group and a small RDS database in ap-south-1 (needs an account that is allowed to use EC2 and RDS)."
   type        = string
-  default     = "ap-south-1"
+  default     = "s3"
+
+  validation {
+    condition     = contains(["s3", "full"], var.demo_scope)
+    error_message = "demo_scope must be \"s3\" or \"full\"."
+  }
+}
+
+variable "region" {
+  description = "AWS region. Leave empty to use the scope's region: us-east-1 for \"s3\", ap-south-1 for \"full\". Any other region is refused (see the precondition on the bucket)."
+  type        = string
+  default     = ""
 }
 
 variable "my_ip_cidr" {
-  description = "Your public IP address as a /32 (for example 203.0.113.7/32). Only this address may reach the database on port 5432."
+  description = "Only for demo_scope = \"full\": your public IP address as a /32 (for example 203.0.113.7/32). Only this address may reach the database on port 5432. Not needed (and unused) in the \"s3\" scope."
   type        = string
+  default     = ""
 
   validation {
-    condition     = can(cidrhost(var.my_ip_cidr, 0)) && endswith(var.my_ip_cidr, "/32")
+    condition     = var.my_ip_cidr == "" || (can(cidrhost(var.my_ip_cidr, 0)) && endswith(var.my_ip_cidr, "/32"))
     error_message = "my_ip_cidr must be a single IPv4 address written as a /32, for example 203.0.113.7/32."
   }
 
@@ -38,7 +50,7 @@ variable "db_username" {
 }
 
 variable "enable_budget_guard" {
-  description = "Create an AWS Budgets alert at budget_limit_usd. Off by default; AWS Budgets' first budgets are free (check the Budgets pricing page)."
+  description = "Create an AWS Budgets alert at budget_limit_usd (only in the \"full\" scope). Off by default; AWS Budgets' first budgets are free (check the Budgets pricing page)."
   type        = bool
   default     = false
 }

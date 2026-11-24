@@ -1,0 +1,14 @@
+# DriftPilot settings for the real-AWS demo, "full" scope (S3 + security group + RDS, ap-south-1).
+# Only for an account that is allowed to use EC2 and RDS. No keys here: use your AWS profile.
+scanners:
+  aws:
+    region: ap-south-1
+    include_names: ["driftpilot-demo*"]
+    resource_types: [s3_bucket, security_group, iam_user]
+mode: advise
+ownership:
+  default_team: platform
+  environment: demo
+  repo: demo/aws
+llm:
+  enabled: true
