@@ -33,5 +33,6 @@ export function ago(from: Date | null, now: Date): string {
   if (s < 10) return 'just now';
   if (s < 60) return `${s} s ago`;
   if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  return `${Math.round(s / 3600)} h ago`;
+  if (s < 172_800) return `${Math.round(s / 3600)} h ago`;
+  return `${Math.round(s / 86_400)} d ago`;
 }
