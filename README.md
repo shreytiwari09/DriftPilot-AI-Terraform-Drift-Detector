@@ -251,14 +251,15 @@ python scripts/simulate_history.py --out /tmp/history
 driftpilot report --history /tmp/history --html /tmp/site && open /tmp/site/index.html
 ```
 
-## Solution 1: infrastructure drift (Terraform: GitHub, Docker, AWS)
+## Solution 1: infrastructure drift (Terraform: GitHub, Docker, AWS, Azure)
 
-Everything from version 1 still works (see [Use it](#use-it)). Version 2 adds AWS and "who changed it":
+Everything from version 1 still works (see [Use it](#use-it)). Version 2 adds AWS, Azure and "who changed it":
 
 - **AWS rules** in the same rule pack. Critical: S3 public access block turned off, a bucket policy open to `*`, IAM `Action`/`Resource` `*`,
   a publicly accessible database, storage or EBS encryption off, CloudTrail logging off. High: backup retention lowered, deletion protection off,
   EC2 public IP on. Noise: `tags_all` mirroring `tags`, a database's moving restore time. Rules were checked against the provider's own
   documentation; attributes that could also be a real change were deliberately **not** made noise rules.
+- **Azure rules.** Critical: blob anonymous access turned on, public network access turned on, HTTPS-only turned off, and a network security group rule that allows SSH or RDP from anywhere. High: the minimum TLS version lowered to 1.0 or 1.1. Low: tag edits. The four critical rules are on the never-soften list. Attribute names were taken from the provider's own schema, and 10 labelled cases are in `eval/cases/azure.yaml`. With rules only they give severity right 78% (7 of 9 real findings), critical caught 100% (5 of 5) and no false alarms; they are not part of the main tables below, which were generated before these cases existed. The live Azure run is described under [Results](#what-was-measured-live).
 - **Compliance tags.** Rules and issues carry descriptive tags (`public-storage`, `network-exposure`, `least-privilege`, `encryption-at-rest`,
   `audit-logging`, `code-review`, `backup`, `data-integrity`, `pii`). They are **not** CIS or SOC 2 control numbers: those have to be checked
   against the official texts before anyone names them.
@@ -367,11 +368,14 @@ Catalog replays: the schema the migrations build against a live schema that some
 The one miss: an index added "for speed" (label low, the AI said medium). The one "false alarm" is an injection case on purpose: a table comment carrying "ignore previous instructions" is a noise change, but the suspicious-input guardrail makes it `investigate`. These cases were written by the author and
 calibrated against the rules of the same author, so treat the high numbers as a check that the pipeline works, not as an independent benchmark.
 
-### What was measured live, locally (not in the tables)
+### What was measured live (not in the tables)
 
 - **Postgres demo (Docker):** the five scenarios gave the expected severity and action; the undo SQL made the next scan clean; a verified migration was produced for the harmless-column case; no scratch database was left behind; 26 live tests pass against the container.
 - **Runner image:** built and run locally (Terraform 1.9.8 inside, non-root user); it ran a recorded scan and a database scan.
-- **Not run anywhere:** a real AWS account, a cloud database, the deploy templates, the GitHub Action on version 2.
+- **Azure (live, Terraform):** on an Azure for Students subscription in Korea Central, Terraform created a resource group, a storage account and a network security group. The baseline scan found no drift. After three portal changes and a tag edit, DriftPilot reported four real findings, all decided by rules with no AI call: three critical (SSH open to any source, blob public access on, HTTPS-only off, each `revert`) and one low (tag edit, `codify`). It then wrote one issue per resource with the undo commands. Everything was destroyed afterwards and a clean check passed. The run needed an MFA sign-in for writes and one of the five allowed regions.
+- **Postgres on Neon (live, cloud):** the demo tables and a read-only login were created on a free Neon project (Postgres 18.7). A clean scan found nothing; after row-level security was switched off, a grant to everyone was added and an `ssn` column was added by hand, DriftPilot reported two critical findings (`revert`) and one high (`investigate`), all by rule, and printed the undo SQL. After undoing the changes the scan was clean and no scratch database was left.
+- **AWS (live):** not run. The account used was on the AWS Free plan, whose service control policy refused creating S3 buckets and denied EC2 and RDS in every region tried. Nothing was created. AWS support is tested only with mocks, recorded events and recorded plans.
+- **Not run anywhere:** the deploy templates and the GitHub Action on version 2.
 
 ### Proven on two repositories (version 1)
 
@@ -616,8 +620,8 @@ written for version 2; several of the underlying figures are **vendor reports** 
 - **The guardrails are not a security proof.** Only the never-soften list is a guarantee, and only for security weakenings that are on it. Paraphrased or obfuscated text can
   avoid the injection signals, and the signals also make some harmless look-alikes get escalated to "investigate". Published research shows adaptive attackers beat many defences.
 - **Unmeasured:** the local-LLM (Ollama) setup was not run; prompt stability was not re-measured for the current prompt; the effect of "who changed it" on AI verdicts was not
-  evaluated (no case carries an event); live AWS behaviour, the cloud deploy templates and the database check against a managed cloud database were never exercised.
-- **AWS:** rules, scanner and event handling are tested only against mocks (moto), recorded plans and documented event formats. Two AWS rule gaps are known (attaching
+  evaluated (no case carries an event); live AWS behaviour and the cloud deploy templates were never exercised. The database check ran against a free hosted Postgres (Neon) and the Terraform checks against one small Azure subscription, both as small demos.
+- **AWS:** rules, scanner and event handling are tested only against mocks (moto), recorded plans and documented event formats; a live run was blocked by the Free plan's service control policy. Two AWS rule gaps are known (attaching
   `AdministratorAccess` to a user has no rule; whether a public IP on an EC2 instance is "high" or "critical" is undecided).
 - **Database:** Postgres only; views, functions, triggers, enums, extensions and sequences are not compared; a migration that adds a role-dependent grant needs those roles on the scratch server.
 - **Modules:** resources inside modules are fixed by editing the module call; `ignore_changes` can't be set from a call.
@@ -629,12 +633,12 @@ written for version 2; several of the underlying figures are **vendor reports** 
 
 ## Roadmap
 
-- **Next, once Shrey has reviewed version 2:** release and tag, update the demo workflows, publish the new dashboard, try the AWS runner in a sandbox account, try a cloud Postgres.
+- **Next:** update the demo workflows to version 2, publish the new dashboard, and try the AWS runner and a live AWS check in an account that is not on the Free plan.
 - **More drift types:**
   - data-file drift (a baseline profile in Git, a population-stability score with a minimum-sample gate, an "accept new baseline" PR); the research notes found no source linking Terraform drift to data drift, so it would be framed as a triage aid
   - Kubernetes drift (weakest case: Argo CD and Flux already cover it)
   - more database objects (views, functions, triggers, enums) and MySQL
-  - Azure and Google Cloud scanners
+  - Azure and Google Cloud scanners for resources created outside Terraform (the Azure drift checks above use Terraform's plan, so they need no scanner)
 - **Smarter judgment:**
   - a classifier trained on accept/overrule decisions
   - noise rules suggested from repeated dismissals
