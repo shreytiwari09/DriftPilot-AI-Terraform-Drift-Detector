@@ -34,7 +34,13 @@ def _rate(frame: pd.DataFrame) -> tuple[float | None, int]:
     return round(float((decided["outcome"] == "overruled").mean()), 3), len(decided)
 
 
-def monitor(episodes: pd.DataFrame, now: datetime, min_decided: int = 5) -> MonitorReport:
+def monitor(
+    episodes: pd.DataFrame,
+    now: datetime,
+    min_decided: int = 5,
+    check_overrule: bool = True,
+    check_mix: bool = True,
+) -> MonitorReport:
     if not len(episodes):
         return MonitorReport(
             weekly_overrule_rate={},
@@ -66,7 +72,12 @@ def monitor(episodes: pd.DataFrame, now: datetime, min_decided: int = 5) -> Moni
             )
 
     alerts = []
-    if recent_rate is not None and recent_n >= min_decided and recent_rate > OVERRULE_ALERT:
+    if (
+        check_overrule
+        and recent_rate is not None
+        and recent_n >= min_decided
+        and recent_rate > OVERRULE_ALERT
+    ):
         was = f" (was {baseline_rate:.0%})" if baseline_rate is not None else ""
         alerts.append(
             f"Humans overruled {recent_rate:.0%} of DriftPilot's decided verdicts in the last "
@@ -75,7 +86,7 @@ def monitor(episodes: pd.DataFrame, now: datetime, min_decided: int = 5) -> Moni
     # PSI over a handful of episodes is noise (live: 1 new episode gave PSI 4.6)
     enough = len(recent) >= min_decided and len(baseline) >= min_decided
     for dim, value in verdict_psi.items():
-        if enough and value > PSI_ALERT:
+        if check_mix and enough and value > PSI_ALERT:
             alerts.append(
                 f"The mix of verdict {dim} values shifted (PSI {value:.2f} > {PSI_ALERT}) "
                 f"compared with the previous {BASELINE_DAYS} days."
@@ -88,6 +99,25 @@ def monitor(episodes: pd.DataFrame, now: datetime, min_decided: int = 5) -> Moni
         verdict_psi=verdict_psi,
         alerts=alerts,
     )
+
+
+def monitor_streams(episodes: pd.DataFrame, now: datetime, min_decided: int = 5) -> MonitorReport:
+    """The monitor for a history that holds several repositories and drift types.
+
+    A shift in the verdict mix is only meaningful inside one stream (one repository and drift type):
+    pooling them made a new, critical-heavy demo repository look like DriftPilot changing its mind.
+    The human overrule rate is checked across everything, since people rejecting its advice matters
+    whatever the mix. The numbers shown on the dashboard stay pooled.
+    """
+    overall = monitor(episodes, now, min_decided, check_mix=False)
+    alerts = list(overall.alerts)
+    if len(episodes) and {"repo", "drift_type"} <= set(episodes.columns):
+        for (repo, drift_type), group in episodes.groupby(["repo", "drift_type"], dropna=False):
+            alerts += [
+                f"{repo} ({drift_type}): {a}"
+                for a in monitor(group, now, min_decided, check_overrule=False).alerts
+            ]
+    return overall.model_copy(update={"alerts": alerts})
 
 
 def alert_issue_body(report: MonitorReport) -> str:

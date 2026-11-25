@@ -141,7 +141,7 @@ def report(
     """Analyze drift history: recurring drift, anomalies, shifts, health, verdict monitor."""
     from driftpilot.history.analytics import analyze, episodes_frame
     from driftpilot.history.store import LocalStore
-    from driftpilot.history.verdict_monitor import monitor
+    from driftpilot.history.verdict_monitor import monitor_streams
     from driftpilot.report.console import print_history
     from driftpilot.report.dashboard import build_site
     from driftpilot.report.dashboard.data import episode_records, episodes_csv
@@ -154,7 +154,9 @@ def report(
     analytics = analyze(events, runs)
     episodes = episodes_frame(events, runs)
     mon = (
-        monitor(episodes, analytics.period_end) if analytics.period_end else monitor(episodes, None)
+        monitor_streams(episodes, analytics.period_end)
+        if analytics.period_end
+        else monitor_streams(episodes, None)
     )
     if json_output:
         print(

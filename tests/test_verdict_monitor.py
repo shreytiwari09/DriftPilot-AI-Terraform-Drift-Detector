@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 
-from driftpilot.history.verdict_monitor import alert_issue_body, monitor
+from driftpilot.history.verdict_monitor import alert_issue_body, monitor, monitor_streams
 
 NOW = datetime(2026, 10, 25, tzinfo=UTC)
 
@@ -62,3 +62,34 @@ def test_mix_shift_needs_enough_recent_episodes() -> None:
 
 def test_empty() -> None:
     assert not monitor(pd.DataFrame(), NOW).breached
+
+
+def stream(repo: str, drift_type: str, rows) -> pd.DataFrame:
+    return frame(rows).assign(repo=repo, drift_type=drift_type)
+
+
+def test_a_new_stream_does_not_look_like_a_mix_shift_in_the_old_one() -> None:
+    """Live false alarm: critical-heavy demo repos were pooled with the old history."""
+    old = stream("org/infra", "infrastructure", steady(range(15, 70)))
+    demo = stream("org/demo", "database", steady(range(1, 8), severity="critical"))
+    pooled = pd.concat([old, demo], ignore_index=True)
+    assert monitor(pooled, NOW).breached  # pooling the streams shifts the mix
+    assert not monitor_streams(pooled, NOW).breached  # each stream on its own is steady
+
+
+def test_mix_shift_inside_one_stream_still_alerts_and_names_it() -> None:
+    eps = stream(
+        "org/infra", "infrastructure",
+        steady(range(15, 70)) + steady(range(1, 14), severity="critical"),
+    )  # fmt: skip
+    report = monitor_streams(eps, NOW)
+    assert any("org/infra (infrastructure)" in a and "severity" in a for a in report.alerts)
+
+
+def test_overrule_rate_is_still_checked_across_all_streams() -> None:
+    a = stream(
+        "org/a", "infrastructure", steady(range(15, 70)) + steady(range(1, 6), overruled_every=1)
+    )
+    b = stream("org/b", "database", steady(range(1, 6), overruled_every=1))
+    report = monitor_streams(pd.concat([a, b], ignore_index=True), NOW)
+    assert any("overruled" in x for x in report.alerts)

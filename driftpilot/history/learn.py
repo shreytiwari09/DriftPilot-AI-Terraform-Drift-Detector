@@ -9,7 +9,7 @@ from driftpilot.config import DashboardLinks
 from driftpilot.history.analytics import AnalyticsReport, analyze, episodes_frame
 from driftpilot.history.outcomes import update_outcomes
 from driftpilot.history.store import HistoryStore, records_from_scan
-from driftpilot.history.verdict_monitor import MonitorReport, alert_issue_body, monitor
+from driftpilot.history.verdict_monitor import MonitorReport, alert_issue_body, monitor_streams
 from driftpilot.models import AuditRecord, RunRecord, ScanResult
 from driftpilot.report.dashboard import build_site
 
@@ -44,7 +44,7 @@ def learn(
 
     report = analyze(events, runs)
     episodes = episodes_frame(events, runs)
-    mon = monitor(episodes, report.period_end)  # history now has at least this run
+    mon = monitor_streams(episodes, report.period_end)  # history now has at least this run
     learned = Learned(report, mon, episodes, updated, runs, store.load_audit())
     if mon.breached and output is not None:
         learned.alert_url = output.alert(
