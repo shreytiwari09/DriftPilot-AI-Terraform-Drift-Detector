@@ -42,7 +42,7 @@ def embedded(page: str) -> dict:
 
 def test_page_and_data_json_carry_the_same_data() -> None:
     files = files_for(EVENTS, RUNS, title="Sim <demo>", note="Simulated <history>")
-    assert set(files) == {"index.html", "data.json"}
+    assert set(files) == {"index.html", "data.json", "metrics.prom"}
     data = json.loads(files["data.json"])
     assert embedded(files["index.html"]) == data
     assert data["schema"] == 1 and data["note"] == "Simulated <history>"

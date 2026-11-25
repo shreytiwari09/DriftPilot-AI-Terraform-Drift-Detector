@@ -97,7 +97,7 @@ def test_account_ids_never_reach_the_site_files() -> None:
 def test_falls_back_to_the_single_file_page_when_the_app_is_missing() -> None:
     with patch.object(dash, "app_files", return_value=None):
         files = site()
-    assert set(files) == {"index.html", "data.json"}
+    assert set(files) == {"index.html", "data.json", "metrics.prom"}
     assert "chart.umd.min.js" in files["index.html"]  # the older page
 
 
