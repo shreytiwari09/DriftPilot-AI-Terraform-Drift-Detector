@@ -159,7 +159,10 @@ def test_report_html_writes_the_app_and_data(tmp_path: Path) -> None:
 
 # ---- the optional pause control (Phase 6e) ----
 
-CSP = """<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://api.github.com" />"""
+CSP = (
+    '<meta http-equiv="Content-Security-Policy" '
+    "content=\"connect-src 'self' https://api.github.com\" />"
+)
 
 
 def test_the_page_may_only_connect_to_itself_and_the_github_api() -> None:
