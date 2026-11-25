@@ -50,15 +50,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-/** Colours for the charts (SVG), picked per theme. Same meaning in both: red worst, grey least. */
+/** Colours for the charts (SVG), picked per theme. Severity hues each mean something; everything else is neutral. */
 export const palette = (dark: boolean) => ({
-  critical: dark ? '#f87171' : '#dc2626',
-  high: dark ? '#fb923c' : '#ea580c',
-  medium: dark ? '#fbbf24' : '#ca8a04',
-  low: dark ? '#94a3b8' : '#64748b',
-  brand: dark ? '#5b9bff' : '#1f6feb',
-  teal: dark ? '#2dd4bf' : '#0d9488',
-  grid: dark ? '#243049' : '#e2e8f0',
-  text: dark ? '#94a3b8' : '#5b6678',
-  surface: dark ? '#111a2b' : '#ffffff',
+  critical: dark ? '#e5484d' : '#dc2626',
+  high: dark ? '#e0803c' : '#d9691e',
+  medium: dark ? '#d9a93f' : '#ca8a04',
+  low: dark ? '#85858b' : '#8a8a8a',
+  brand: dark ? '#58a6ff' : '#1f6feb',
+  neutral: dark ? '#6b6b70' : '#a3a3a3',
+  grid: dark ? 'rgba(237,237,237,0.08)' : 'rgba(23,23,23,0.08)',
+  cursor: dark ? 'rgba(237,237,237,0.05)' : 'rgba(23,23,23,0.04)',
+  text: dark ? '#85858b' : '#737373',
+  surface: dark ? '#19191b' : '#ffffff',
 });

@@ -46,6 +46,7 @@ export default defineConfig({
     emptyOutDir: true,
     modulePreload: false,
     cssCodeSplit: false,
+    assetsInlineLimit: 40_000, // the Plex fonts are inlined into the CSS: no extra files, no requests
     chunkSizeWarningLimit: 900,
     rollupOptions: { output: { format: 'iife', inlineDynamicImports: true } },
   },

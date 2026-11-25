@@ -2,74 +2,119 @@
 @tailwind components;
 @tailwind utilities;
 
+/* IBM Plex (OFL), bundled: the woff2 files are inlined by Vite, so there are no font requests. */
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('../node_modules/@fontsource/ibm-plex-sans/files/ibm-plex-sans-latin-500-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 400; font-display: swap; src: url('../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-400-normal.woff2') format('woff2'); }
+@font-face { font-family: 'IBM Plex Mono'; font-style: normal; font-weight: 500; font-display: swap; src: url('../node_modules/@fontsource/ibm-plex-mono/files/ibm-plex-mono-latin-500-normal.woff2') format('woff2'); }
+
+/* Graphite ramp. Hairline = text colour at 8% (the `line` colour). The accent is the brand blue. */
 :root {
-  --bg: 245 247 251;
+  --side: 250 250 250;
+  --bg: 250 250 250;
   --surface: 255 255 255;
-  --sunken: 238 242 247;
-  --line: 226 232 240;
-  --ink: 15 23 42;
-  --mute: 91 102 120;
+  --sunken: 244 244 245;
+  --hover: 236 236 238;
+  --ink: 23 23 23;
+  --ink2: 82 82 82;
+  --mute: 115 115 115;
   --brand: 31 111 235;
-  --teal: 13 148 136;
+  --brand-ink: 25 95 205;
   --crit: 220 38 38;
-  --high: 234 88 12;
-  --med: 161 98 7;
-  --low: 71 85 105;
+  --high: 217 105 30;
+  --med: 202 138 4;
+  --low: 138 138 138;
   --ok: 21 128 61;
-  --shadow: 15 23 42;
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.05);
   color-scheme: light;
 }
 :root[data-theme='dark'] {
-  --bg: 8 13 24;
-  --surface: 17 26 43;
-  --sunken: 12 20 34;
-  --line: 36 48 73;
-  --ink: 230 237 247;
-  --mute: 148 163 184;
-  --brand: 91 155 255;
-  --teal: 45 212 191;
-  --crit: 248 113 113;
-  --high: 251 146 60;
-  --med: 251 191 36;
-  --low: 148 163 184;
-  --ok: 74 222 128;
-  --shadow: 0 0 0;
+  --side: 15 15 16;
+  --bg: 20 20 21;
+  --surface: 25 25 27;
+  --sunken: 35 35 37;
+  --hover: 44 44 46;
+  --ink: 237 237 237;
+  --ink2: 161 161 166;
+  --mute: 133 133 139;
+  --brand: 88 166 255;
+  --brand-ink: 88 166 255;
+  --crit: 229 72 77;
+  --high: 224 128 60;
+  --med: 217 169 63;
+  --low: 133 133 139;
+  --ok: 76 195 138;
+  --shadow-card: none;
   color-scheme: dark;
 }
 
 @layer base {
   html { -webkit-text-size-adjust: 100%; }
-  body { @apply bg-bg font-sans text-ink antialiased; font-feature-settings: 'cv11', 'ss01'; }
+  body { @apply bg-bg font-sans text-sm text-ink antialiased; line-height: 20px; }
   :focus-visible { outline: 2px solid rgb(var(--brand)); outline-offset: 2px; border-radius: 6px; }
   ::selection { background: rgb(var(--brand) / 0.25); }
+  select, input { font: inherit; }
 }
 
 @layer components {
-  .card { @apply rounded-2xl border border-line bg-surface shadow-card; }
+  .card { @apply rounded-xl border border-line bg-surface; box-shadow: var(--shadow-card); }
   .btn {
-    @apply inline-flex min-h-[36px] items-center justify-center gap-2 rounded-lg border border-line bg-surface px-3 text-sm font-medium text-ink transition
-      hover:border-brand/50 hover:bg-sunken disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex h-9 items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-line bg-sunken px-3 text-sm font-medium text-ink transition-colors
+      hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50;
   }
-  .btn-primary { @apply border-transparent bg-brand text-white hover:bg-brand/90 hover:border-transparent; }
-  :root[data-theme='dark'] .btn-primary { color: #06101f; }
+  .btn-sm { @apply h-8 px-2.5 text-[13px]; }
+  .btn-icon { @apply w-9 px-0; }
+  .btn-ghost { @apply border-transparent bg-transparent text-ink2 hover:bg-sunken hover:text-ink; }
+  .btn-primary { @apply border-transparent bg-ink text-bg hover:bg-ink/90; }
+  .btn:active { transform: scale(0.98); }
   .field {
-    @apply min-h-[36px] w-full rounded-lg border border-line bg-surface px-2.5 text-sm text-ink placeholder:text-mute/70;
+    @apply h-9 w-full rounded-lg border border-line bg-surface px-3 text-sm text-ink transition-colors placeholder:text-mute hover:border-ink/20;
   }
-  .label { @apply mb-1 block text-[11px] font-semibold uppercase tracking-wide text-mute; }
-  .chip { @apply inline-flex whitespace-nowrap items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium; }
-  .h-page { @apply text-2xl font-semibold tracking-tight; }
-  .h-card { @apply text-sm font-semibold; }
+  select.field {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 32px;
+    text-overflow: ellipsis;
+  }
+  input[type='date'].field { padding-right: 8px; }
+  input[type='date']::-webkit-calendar-picker-indicator { opacity: 0.6; cursor: pointer; }
+  input[type='search']::-webkit-search-cancel-button { appearance: none; }
+  .label { @apply mb-1 block text-xs text-mute; }
+  .h-page { @apply text-2xl font-medium sm:text-[28px]; line-height: 32px; }
+  .h-card { @apply text-sm font-medium; }
+  .fig { @apply font-mono tabular-nums; }
+  .tag { @apply inline-flex items-center rounded-md bg-sunken px-1.5 py-0.5 font-mono text-xs text-ink2; }
 }
 
-.fade-up { animation: fade-up 0.35s ease-out both; }
-.slide-in { animation: slide-in 0.25s ease-out both; }
-.fade-in { animation: fade-in 0.2s ease-out both; }
-@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-@keyframes slide-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* One entrance: the page's first six blocks fade and rise a few pixels, 50 ms apart. */
+.stagger > * { animation: rise 320ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.stagger > :nth-child(2) { animation-delay: 50ms; }
+.stagger > :nth-child(3) { animation-delay: 100ms; }
+.stagger > :nth-child(4) { animation-delay: 150ms; }
+.stagger > :nth-child(5) { animation-delay: 200ms; }
+.stagger > :nth-child(6) { animation-delay: 250ms; }
+.stagger > :nth-child(n + 7) { animation: none; }
+.slide-in { animation: slide-in 240ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.fade-in { animation: fade-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes slide-in { from { transform: translateX(16px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
-  .fade-up, .slide-in, .fade-in { animation: none; }
+  .stagger > *, .slide-in, .fade-in { animation: none; }
   * { scroll-behavior: auto !important; transition-duration: 0.01ms !important; }
 }
+
+/* Icon button tooltip (header). Hover or keyboard focus shows it. */
+.tip { position: relative; }
+.tip::after {
+  content: attr(data-tip);
+  position: absolute; top: calc(100% + 6px); right: 0; z-index: 40;
+  white-space: nowrap; padding: 4px 8px; border-radius: 6px;
+  font-size: 12px; line-height: 16px; font-weight: 400;
+  background: rgb(var(--ink)); color: rgb(var(--bg));
+  opacity: 0; pointer-events: none; transition: opacity 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.tip:hover::after, .tip:focus-visible::after { opacity: 1; }
+
 .recharts-wrapper:focus, .recharts-surface:focus { outline: none; }
 .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
