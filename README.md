@@ -10,12 +10,12 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-1f6feb" alt="version 2.0.0">
+  <img src="https://img.shields.io/badge/version-2.0.1-1f6feb" alt="version 2.0.1">
   <img src="https://img.shields.io/badge/GitHub%20Action-composite-2088FF?logo=githubactions&logoColor=white" alt="GitHub Action">
   <img src="https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/terraform-%E2%89%A5%201.5-7B42BC?logo=terraform&logoColor=white" alt="Terraform 1.5+">
   <img src="https://img.shields.io/badge/postgres-16-4169E1?logo=postgresql&logoColor=white" alt="Postgres">
-  <img src="https://img.shields.io/badge/tests-586%20passing%20(%2B26%20need%20Postgres)-2ea44f" alt="586 tests passing, 26 more need a live Postgres">
+  <img src="https://img.shields.io/badge/tests-764%20passing%20(%2B26%20need%20Postgres)-2ea44f" alt="764 tests passing, 26 more need a live Postgres">
   <img src="https://img.shields.io/badge/AI-Gemini%20Flash--Lite-8E75B2" alt="Gemini Flash-Lite">
 </p>
 
