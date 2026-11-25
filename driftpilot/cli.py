@@ -172,6 +172,7 @@ def report(
             analytics, mon, episodes, runs, note=note, publish_addresses=publish_addresses,
             audit=store.load_audit(), links=cfg.dashboard.links,
             llm_call_limit=cfg.limits.max_llm_calls,
+            scan_every_hours=cfg.dashboard.scan_every_hours, sla_hours=cfg.dashboard.sla_hours,
         )  # fmt: skip
         for name, text in files.items():
             target = html / name
@@ -405,6 +406,8 @@ def _learn_and_publish(
             cfg.dashboard.publish_addresses,
             cfg.dashboard.links,
             cfg.limits.max_llm_calls,
+            cfg.dashboard.scan_every_hours,
+            cfg.dashboard.sla_hours,
         )
         url = publish_dashboard(
             files, dashboard_repo, dashboard_token, f"Update dashboard ({result.run_id})"

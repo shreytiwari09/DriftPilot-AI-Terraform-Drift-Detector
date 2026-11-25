@@ -84,6 +84,8 @@ def build_site(
     audit: list[AuditRecord] | None = None,
     links: DashboardLinks | None = None,
     llm_call_limit: int | None = 60,
+    scan_every_hours: float = 6,
+    sla_hours: dict[str, float | None] | None = None,
 ) -> dict[str, str]:
     """Every file to publish: the React app, `index.html` with data embedded, and `data.json`.
 
@@ -94,7 +96,7 @@ def build_site(
         return build_dashboard(report, monitor, episodes, runs, title, note, publish_addresses)
     data = build_data(
         report, monitor, episodes, runs, title, note, publish_addresses, None, audit, links,
-        llm_call_limit,
+        llm_call_limit, scan_every_hours, sla_hours,
     )  # fmt: skip
     text = json.dumps(data, separators=(",", ":")) + "\n"
     return {**app, "index.html": render_app_page(app["index.html"], data), "data.json": text}

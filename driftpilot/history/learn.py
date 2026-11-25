@@ -62,6 +62,8 @@ def dashboard_files(
     publish_addresses: bool = True,
     links: DashboardLinks | None = None,
     llm_call_limit: int | None = 60,
+    scan_every_hours: float = 6,
+    sla_hours: dict[str, float | None] | None = None,
 ) -> dict[str, str]:
     """The app, `index.html` (data embedded) and `data.json`, ready to publish or write out."""
     return build_site(
@@ -75,6 +77,8 @@ def dashboard_files(
         learned.audit,
         links,
         llm_call_limit,
+        scan_every_hours,
+        sla_hours,
     )
 
 

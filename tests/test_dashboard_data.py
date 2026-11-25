@@ -281,3 +281,102 @@ def test_guardrail_data_counts_calls_and_events() -> None:
     assert row["calls"] == 2 and row["invalid"] == 1 and row["events"] == {"never-soften": 1}
     assert row["repo"] == "acme/infra"
     assert guardrail_data(None, runs, None) == {"llmCallLimit": None, "hasAudit": False, "runs": []}
+
+
+# ---- scan health (data.json "scans") and SLA ----
+
+
+def _run_record(hour: int, errors: int = 0, repo="acme/infra", findings=1, working_dir="infra"):
+    from datetime import UTC, datetime, timedelta
+
+    from driftpilot.models import RunRecord
+
+    return RunRecord(
+        run_id=f"r{hour}-{repo}", timestamp=datetime(2026, 10, 1, tzinfo=UTC) + timedelta(hours=hour),
+        working_dir=working_dir, finding_count=findings, critical_count=0, distinct_resources=1,
+        unmanaged_count=0, noise_count=2, repo=repo, errors=errors,
+    )  # fmt: skip
+
+
+def test_old_run_lines_load_without_errors_field() -> None:
+    from driftpilot.models import RunRecord
+
+    line = (
+        '{"run_id":"a","timestamp":"2026-10-01T00:00:00Z","working_dir":".","finding_count":0,'
+        '"critical_count":0,"distinct_resources":0,"unmanaged_count":0,"noise_count":0}'
+    )
+    assert RunRecord.model_validate_json(line).errors == 0
+
+
+def test_scan_health_counts_runs_gaps_and_errors_per_stream() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from driftpilot.report.dashboard.data import scan_health
+
+    runs = [_run_record(h, errors=1 if h == 12 else 0) for h in (0, 6, 12, 36, 42)]
+    runs.append(_run_record(40, repo="acme/db"))
+    as_of = datetime(2026, 10, 1, 20, tzinfo=UTC) + timedelta(days=1)  # hour 44
+    health = scan_health(runs, as_of, 6)
+    assert health["expectedHours"] == 6
+    infra = next(s for s in health["streams"] if s["repo"] == "acme/infra")
+    assert infra["lastRun"] == "2026-10-02T18:00:00Z"
+    assert infra["runCount24h"] == 2  # 36 h and 42 h (the window is the 24 h before 44 h)
+    assert infra["runCount7d"] == 5
+    assert infra["longestGapHours7d"] == 24  # 12 h -> 36 h
+    assert infra["errors7d"] == 1
+    assert [r["t"] for r in infra["recent"]][-1] == "2026-10-02T18:00:00Z"
+    assert infra["recent"][2]["errors"] == 1 and infra["recent"][0]["noise"] == 2
+    assert len(health["streams"]) == 2
+
+
+def test_scan_health_lists_only_the_last_20_runs_and_handles_no_runs() -> None:
+    from datetime import UTC, datetime
+
+    from driftpilot.report.dashboard.data import scan_health
+
+    runs = [_run_record(h) for h in range(30)]
+    streams = scan_health(runs, datetime(2026, 10, 3, tzinfo=UTC), 6)["streams"]
+    assert len(streams[0]["recent"]) == 20 and streams[0]["runCount7d"] == 30
+    assert scan_health([], None, 6) == {"expectedHours": 6, "streams": []}
+
+
+def test_scan_health_gap_includes_the_time_since_the_last_run() -> None:
+    from datetime import UTC, datetime
+
+    from driftpilot.report.dashboard.data import scan_health
+
+    runs = [_run_record(0), _run_record(6)]
+    other = [_run_record(60, repo="acme/db")]  # a stream that kept running
+    streams = scan_health([*runs, *other], datetime(2026, 10, 3, 12, tzinfo=UTC), 6)["streams"]
+    stale = next(s for s in streams if s["repo"] == "acme/infra")
+    assert stale["longestGapHours7d"] == 54  # hour 6 until hour 60 (as of = newest run)
+
+
+def test_build_data_has_scans_sla_and_settings() -> None:
+    from driftpilot.history.analytics import analyze, episodes_frame
+    from driftpilot.history.verdict_monitor import monitor
+    from driftpilot.report.dashboard.data import build_data
+
+    runs = [_run_record(0), _run_record(6)]
+    report = analyze([], runs)
+    eps = episodes_frame([], runs)
+    data = build_data(report, monitor(eps, report.period_end), eps, runs, scan_every_hours=4)
+    assert data["scans"]["expectedHours"] == 4 and len(data["scans"]["streams"]) == 1
+    assert data["sla"] == {"critical": 24, "high": 72, "medium": 168, "low": None}
+    data = build_data(report, monitor(eps, report.period_end), eps, runs, sla_hours={"high": 1})
+    assert data["sla"] == {"high": 1}
+
+
+def test_config_defaults_and_partial_sla_override(tmp_path) -> None:
+    from driftpilot.config import load_config
+
+    cfg = load_config(None, tmp_path)
+    assert cfg.dashboard.scan_every_hours == 6
+    assert cfg.dashboard.sla_hours == {"critical": 24, "high": 72, "medium": 168, "low": None}
+    assert cfg.notifications.format == "slack" and cfg.notifications.min_severity == "high"
+    (tmp_path / ".driftpilot.yml").write_text(
+        "dashboard:\n  scan_every_hours: 1\n  sla_hours: {critical: 4, low: 720}\n"
+    )
+    cfg = load_config(None, tmp_path)
+    assert cfg.dashboard.scan_every_hours == 1
+    assert cfg.dashboard.sla_hours == {"critical": 4, "high": 72, "medium": 168, "low": 720}

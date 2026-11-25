@@ -137,6 +137,7 @@ class RunRecord(BaseModel):
     drift_type: DriftType = "infrastructure"
     managed_by_team: dict[str, int] = {}  # for per-team coverage and drift rate
     unmanaged_by_team: dict[str, int] = {}
+    errors: int = 0  # problems this run reported (scanner, event, remediation, history); 0 = clean
 
 
 GuardrailKind = Literal[

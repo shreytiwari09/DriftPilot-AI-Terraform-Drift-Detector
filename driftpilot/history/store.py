@@ -186,6 +186,7 @@ def records_from_scan(result: ScanResult) -> tuple[list[HistoryEvent], RunRecord
         drift_type=result.context.drift_type,
         managed_by_team=result.managed_by_team,
         unmanaged_by_team=unmanaged_by_team,
+        errors=len(result.errors),
     )
     return events, run
 

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from driftpilot.models import Severity
 
@@ -96,9 +96,35 @@ class DashboardLinks(BaseModel):
     branch: str | None = None  # branch that holds .driftpilot.yml, default "main"
 
 
+DEFAULT_SLA_HOURS: dict[str, float | None] = {
+    "critical": 24, "high": 72, "medium": 168, "low": None,
+}  # fmt: skip
+
+
 class DashboardConfig(BaseModel):
     publish_addresses: bool = True  # false: resource addresses become stable hashes in data.json
     links: DashboardLinks = DashboardLinks()
+    scan_every_hours: float = Field(default=6, gt=0)  # how often a scan is expected (for "late")
+    # Hours an open finding may wait per severity before the dashboard calls it overdue.
+    # null (or a missing severity) means no deadline.
+    sla_hours: dict[str, float | None] = Field(default_factory=lambda: dict(DEFAULT_SLA_HOURS))
+
+    @field_validator("sla_hours")
+    @classmethod
+    def _fill_defaults(cls, value: dict[str, float | None]) -> dict[str, float | None]:
+        return {**DEFAULT_SLA_HOURS, **value}  # naming only `critical` keeps the other defaults
+
+
+NotifyEvent = Literal["new_drift", "monitor_alert", "scan_failed"]
+
+
+class NotificationsConfig(BaseModel):
+    """Chat/webhook messages. Off unless the environment variable `webhook_env` holds an https URL."""
+
+    webhook_env: str = "DRIFTPILOT_WEBHOOK_URL"  # the URL is a secret: it is read from here only
+    format: Literal["slack", "teams", "generic"] = "slack"
+    min_severity: Severity = "high"  # new drift below this stays out of the chat
+    on: list[NotifyEvent] = ["new_drift", "monitor_alert", "scan_failed"]
 
 
 class DatabaseConfig(BaseModel):
@@ -123,6 +149,7 @@ class Config(BaseModel):
     limits: LimitsConfig = LimitsConfig()
     ownership: OwnershipConfig = OwnershipConfig()
     dashboard: DashboardConfig = DashboardConfig()
+    notifications: NotificationsConfig = NotificationsConfig()
     database: DatabaseConfig = DatabaseConfig()
 
 

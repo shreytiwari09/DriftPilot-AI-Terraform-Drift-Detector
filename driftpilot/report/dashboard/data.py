@@ -13,12 +13,13 @@ import re
 import shlex
 from collections import Counter
 from datetime import UTC, datetime
+from importlib import resources
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
-from driftpilot.config import DashboardLinks
+from driftpilot.config import DEFAULT_SLA_HOURS, DashboardLinks
 from driftpilot.history.analytics import AnalyticsReport, stream_key
 from driftpilot.history.verdict_monitor import OVERRULE_ALERT, MonitorReport
 from driftpilot.models import AuditRecord, RunRecord
@@ -172,6 +173,65 @@ def run_records(runs: list[RunRecord]) -> list[dict]:
         }
         for r in sorted(last.values(), key=lambda r: r.timestamp)
     ]
+
+
+RECENT_RUNS = 20  # runs listed per stream on the Scans page
+
+
+def scan_health(runs: list[RunRecord], as_of: datetime | None, expected_hours: float) -> dict:
+    """Is DriftPilot itself running on time? One row per stream, counted back from `as_of`.
+
+    `as_of` is the newest scan in the history (not the clock), so the numbers do not change
+    depending on when the page was built. On time / late / stale is decided by the page from the
+    current time and `expectedHours`: on time up to 1.5x the cadence, late up to 3x, stale beyond.
+    """
+    streams: dict[tuple, list[RunRecord]] = {}
+    for r in sorted(runs, key=lambda r: r.timestamp):
+        streams.setdefault(stream_key(r), []).append(r)
+    end = pd.Timestamp(as_of) if as_of is not None else None
+    rows = []
+    for (repo, environment, drift_type, working_dir), items in streams.items():
+        last = items[-1].timestamp
+        stamp = pd.Timestamp(end if end is not None else last)
+        day = [r for r in items if pd.Timestamp(r.timestamp) > stamp - pd.Timedelta(hours=24)]
+        week = [r for r in items if pd.Timestamp(r.timestamp) > stamp - pd.Timedelta(days=7)]
+        points = [pd.Timestamp(r.timestamp) for r in week] + [stamp]
+        gaps = [(b - a).total_seconds() / 3600 for a, b in zip(points, points[1:], strict=False)]
+        rows.append(
+            {
+                "repo": _safe(repo),
+                "environment": _safe(environment),
+                "driftType": drift_type,
+                "dir": Path(working_dir).name or ".",
+                "lastRun": iso(last),
+                "runCount24h": len(day),
+                "runCount7d": len(week),
+                "longestGapHours7d": round(max(gaps), 1) if gaps else 0.0,
+                "errors7d": sum(r.errors for r in week),
+                "recent": [
+                    {
+                        "t": iso(r.timestamp),
+                        "findings": r.finding_count,
+                        "critical": r.critical_count,
+                        "noise": r.noise_count,
+                        "errors": r.errors,
+                    }
+                    for r in items[-RECENT_RUNS:]
+                ],
+            }
+        )
+    rows.sort(key=lambda row: (row["repo"], row["driftType"], row["dir"]))
+    return {"expectedHours": expected_hours, "streams": rows}
+
+
+def evaluation_summary() -> dict | None:
+    """The measured effectiveness of the guardrails (`eval_summary.json`, made by
+    `scripts/export_eval_summary.py`), or None when the file is not shipped."""
+    try:
+        text = resources.files("driftpilot.report.dashboard").joinpath("eval_summary.json")
+        return json.loads(text.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
 
 
 def _in_range(t: str, f: dict) -> bool:
@@ -379,11 +439,14 @@ def build_data(
     audit: list[AuditRecord] | None = None,
     links: DashboardLinks | None = None,
     llm_call_limit: int | None = 60,
+    scan_every_hours: float = 6,
+    sla_hours: dict[str, float | None] | None = None,
 ) -> dict:
     """Everything the page needs, as plain JSON-able values."""
     records = episode_records(episodes, publish_addresses)
     run_rows = run_records(runs)
     as_of = run_rows[-1]["t"] if run_rows else None
+    evaluation = evaluation_summary()
     return {
         "schema": SCHEMA,
         "title": title,
@@ -399,6 +462,11 @@ def build_data(
         "analytics": _analytics(report, publish_addresses),
         "links": build_links(links, records),
         "guardrails": guardrail_data(audit, runs, llm_call_limit),
+        "scans": scan_health(
+            runs, max((r.timestamp for r in runs), default=None), scan_every_hours
+        ),
+        "sla": dict(DEFAULT_SLA_HOURS if sla_hours is None else sla_hours),
+        **({"evaluation": evaluation} if evaluation else {}),
         "monitor": {
             "alerts": monitor.alerts,
             "overruleThreshold": round(100 * OVERRULE_ALERT),

@@ -167,3 +167,10 @@ def test_events_and_run_carry_context(tmp_path: Path, load_fixture) -> None:
     append_scan(store, result)
     assert store.load_events()[0].context.team == "security"
     assert store.load_runs()[0].managed_by_team == run.managed_by_team
+
+
+def test_run_record_counts_the_scan_errors(load_fixture) -> None:
+    result = scan(load_fixture("github/batch_a_s2_s3_s5_s6_s7_s8"))
+    assert records_from_scan(result)[1].errors == 0
+    result.errors += ["event: bad file", "history: could not save"]
+    assert records_from_scan(result)[1].errors == 2
