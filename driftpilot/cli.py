@@ -373,11 +373,18 @@ def _github_output(repo_name: str, token: str):
 
 
 def _learn_and_publish(
-    result: ScanResult, output, branch: str, cfg: Config, publish: bool = True
+    result: ScanResult,
+    output,
+    branch: str,
+    cfg: Config,
+    publish: bool = True,
+    notify_notes: list[str] | None = None,
 ) -> str:
     """Record history, update outcomes, monitor, publish the dashboard; return summary markdown.
 
     `publish=False` records the run but leaves the dashboard to a later call (one per action run).
+    After the history is saved, new drift and a new monitor alert go to the webhook, if one is
+    set; its problems are added to `notify_notes`.
     """
     from driftpilot.history.learn import dashboard_files, learn, publish_dashboard
     from driftpilot.history.store import GitHubBranchStore
@@ -398,6 +405,9 @@ def _learn_and_publish(
         lines.append(f"- Review issue: {learned.alert_url}")
     dashboard_repo = os.environ.get("DRIFTPILOT_DASHBOARD_REPO")
     dashboard_token = os.environ.get("DRIFTPILOT_DASHBOARD_TOKEN")
+    sent = _notify_run(learned, result, output, cfg, notify_notes)
+    if sent:
+        lines.append(f"- Notifications sent: {sent}")
     if publish and dashboard_repo and dashboard_token:
         files = dashboard_files(
             learned,
@@ -414,6 +424,41 @@ def _learn_and_publish(
         )
         lines.append(f"- Dashboard: {url}")
     return "\n".join(lines) + "\n"
+
+
+def _notify_run(learned, result: ScanResult, output, cfg: Config, notes: list[str] | None) -> int:
+    """Send the messages for a recorded run; returns how many were sent (never raises)."""
+    from driftpilot.notify import build_notices, send
+
+    try:
+        notices = build_notices(
+            cfg.notifications,
+            learned.new_events,
+            learned.monitor.alerts,
+            learned.monitor_started,
+            result.context.repo,
+            result.context.drift_type,
+            cfg.dashboard.publish_addresses,
+            getattr(output, "run_url", None) or "",
+        )
+        outcome = send(cfg.notifications, notices)
+    except Exception as e:  # a bad message must never hide the scan result
+        if notes is not None:
+            notes.append(f"notify: {type(e).__name__}")
+        return 0
+    if notes is not None:
+        notes.extend(outcome.errors)
+    return outcome.sent
+
+
+def _notify_failure(cfg: Config, repo: str, errors: list[str], url: str = "") -> list[str]:
+    """Tell the webhook a scan failed; returns problem notes (empty when sent or not set up)."""
+    from driftpilot.notify import failure_notice, send
+
+    try:
+        return send(cfg.notifications, [failure_notice(repo, errors, url)]).errors
+    except Exception as e:
+        return [f"notify: {type(e).__name__}"]
 
 
 CHECKS = ("infrastructure", "database")
@@ -578,7 +623,15 @@ def action(
 
     if "infrastructure" in selected:
         events, event_errors = _action_events(event, os.environ.get("DRIFTPILOT_EVENT_JSON"))
-        result = _scan_or_exit(working_directory, cfg, llm, events=events)
+        try:
+            result = _scan_or_exit(working_directory, cfg, llm, events=events)
+        except typer.Exit:
+            _notify_failure(
+                cfg,
+                repo_name or "this repository",
+                ["the infrastructure scan failed (see the log)"],
+            )
+            raise
         result.errors += event_errors
         finish("Infrastructure drift (Terraform)", result)
     if "database" in selected:
@@ -586,16 +639,25 @@ def action(
         finish("Database drift (Postgres)", result, ctx)
 
     history_md = ""
+    notify_notes: list[str] = []
     branch = os.environ.get("DRIFTPILOT_HISTORY_BRANCH")
     if output is not None and branch:
         recorded = [r for _, r in sections if r.run_id in contexts or _is_infra(r)]
         for n, result in enumerate(recorded):
             try:
                 history_md = _learn_and_publish(
-                    result, output, branch, cfg, publish=n == len(recorded) - 1
-                )
+                    result, output, branch, cfg, publish=n == len(recorded) - 1,
+                    notify_notes=notify_notes,
+                )  # fmt: skip
             except Exception as e:  # learning must never hide this run's drift report
                 result.errors.append(f"history: {redact_url(str(e))}")
+
+    run_url = getattr(output, "run_url", None) or ""
+    for _, result in sections:  # a section that reported problems is announced once
+        if result.errors:
+            notify_notes += _notify_failure(cfg, result.context.repo, result.errors, run_url)
+    if sections:
+        sections[-1][1].errors.extend(notify_notes)  # shown in the summary, after the messages
 
     # CI logs have no terminal, so rich would assume 80 columns and wrap every cell.
     wide = Console(width=200)
