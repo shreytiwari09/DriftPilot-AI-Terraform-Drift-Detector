@@ -1,4 +1,7 @@
+import { useState } from 'react';
+import PauseControl from '../components/PauseControl';
 import { Card, Empty, ExternalLink, StatCard, StatusText } from '../components/ui';
+import { controlTarget, type ControlTarget, type WorkflowState } from '../lib/githubControl';
 import { ago, dateTime, hours, num } from '../lib/format';
 import { cadenceOf, isSimulated, recentRuns, referenceNow, STATUS_LABEL, summarizeScans, type ScanStatus } from '../lib/scans';
 import { actionLinks } from '../lib/url';
@@ -37,9 +40,9 @@ function Freshness({ cadence }: { cadence: number }) {
   );
 }
 
-function Schedule({ cadence, manage, lampAmberHours }: { cadence: number; manage: string | null; lampAmberHours: number }) {
+function Schedule({ cadence, manage, lampAmberHours, target, onWorkflow }: { cadence: number; manage: string | null; lampAmberHours: number; target: ControlTarget | null; onWorkflow: (w: WorkflowState | null) => void }) {
   return (
-    <Card title="Schedule" subtitle="Scans run from your GitHub workflow. This page cannot start, pause or resume them" action={manage ? <ExternalLink href={manage} className="btn btn-sm" hint="Manage schedule: opens this repo's workflow page on GitHub. GitHub asks you to log in. DriftPilot itself changes nothing.">Manage schedule</ExternalLink> : undefined}>
+    <Card title="Schedule" subtitle="Scans run from your GitHub workflow. By default this page only reads them" action={manage ? <ExternalLink href={manage} className="btn btn-sm" hint="Manage schedule: opens this repo's workflow page on GitHub. GitHub asks you to log in. DriftPilot itself changes nothing.">Manage schedule</ExternalLink> : undefined}>
       <p className="fig text-xl font-medium leading-7">Every {cadence} h</p>
       <p className="mb-4 text-xs text-mute">Set by <span className="font-mono">dashboard.scan_every_hours</span> in .driftpilot.yml. It must match the workflow&apos;s cron line</p>
       <ol className="space-y-2 text-sm text-ink2">
@@ -49,6 +52,7 @@ function Schedule({ cadence, manage, lampAmberHours }: { cadence: number; manage
       </ol>
       <p className="mt-4 text-xs text-mute">While paused, this page keeps showing the last scan, and the lamp turns amber once it is older than {lampAmberHours} h</p>
       {!manage && <p className="mt-2 text-xs text-mute">No GitHub repo is known for this data, so the button is hidden. Set <span className="font-mono">dashboard.links.repo</span></p>}
+      {target && <PauseControl target={target} cadence={cadence} onWorkflow={onWorkflow} />}
     </Card>
   );
 }
@@ -61,6 +65,8 @@ export default function Scans({ data, filters }: PageProps) {
   const runs = recentRuns(s.rows, 20);
   const manage = actionLinks(data.links, filters.repo).scan;
   const simulated = isSimulated(data.note);
+  const target = controlTarget(data.links);
+  const [workflow, setWorkflow] = useState<WorkflowState | null>(null); // only known while a token is connected
 
   if (!data.scans || data.scans.streams.length === 0) {
     return (
@@ -73,6 +79,12 @@ export default function Scans({ data, filters }: PageProps) {
 
   return (
     <div className="stagger space-y-6">
+      {workflow === 'disabled' && (
+        <div role="status" className="card flex items-start gap-3 px-4 py-3 sm:px-5">
+          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-med" aria-hidden="true" />
+          <div className="text-sm"><p className="font-medium">Scans are paused</p><p className="text-ink2">The data below stops changing until you resume them in the Schedule card. Shown only while a token is connected on this page.</p></div>
+        </div>
+      )}
       <section aria-label="Scan health numbers" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Streams on time" value={`${s.onTime} / ${s.total}`} detail={`expected every ${cadence} h`} hint="A stream is a repo, environment and drift type. On time means its last scan is at most 1.5 times the expected interval old." />
         <StatCard label="Runs in 24 h" value={num(s.runs24h)} detail="before the latest scan" hint="Scans recorded in the 24 hours before the latest scan, all streams." />
@@ -109,7 +121,7 @@ export default function Scans({ data, filters }: PageProps) {
       </Card>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Schedule cadence={cadence} manage={manage} lampAmberHours={3 * cadence} />
+        <Schedule cadence={cadence} manage={manage} lampAmberHours={3 * cadence} target={target} onWorkflow={setWorkflow} />
         <Freshness cadence={cadence} />
       </div>
 
