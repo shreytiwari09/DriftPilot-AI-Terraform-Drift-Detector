@@ -1,15 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="DriftPilot">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#1f6feb"/>
-      <stop offset="1" stop-color="#0d9488"/>
-    </linearGradient>
-  </defs>
-  <rect x="8" y="8" width="104" height="104" rx="26" fill="url(#bg)"/>
-  <path d="M22 86 q10 -9 20 0 t20 0 t20 0 t20 0" fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="5" stroke-linecap="round"/>
-  <path d="M22 99 q10 -9 20 0 t20 0 t20 0 t20 0" fill="none" stroke="#ffffff" stroke-opacity="0.3" stroke-width="5" stroke-linecap="round"/>
-  <circle cx="60" cy="44" r="25" fill="none" stroke="#ffffff" stroke-width="5"/>
-  <path d="M60 23 L69 46 L60 41 L51 46 Z" fill="#ffffff"/>
-  <path d="M60 65 L51 42 L60 47 L69 42 Z" fill="#ffffff" fill-opacity="0.45"/>
-  <circle cx="60" cy="44" r="3.5" fill="#1f6feb"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 98 84" width="98" height="84"><style>.t{fill:#141415}.b{fill:#1f6feb}@media (prefers-color-scheme:dark){.t{fill:#ededed}.b{fill:#58a6ff}}</style><defs><clipPath id="t"><rect x="-300" y="-300" width="700" height="347.9"/></clipPath><clipPath id="b"><rect x="-300" y="52.1" width="700" height="400"/></clipPath></defs><g transform="translate(-0.36 -8.05)"><g transform="rotate(-20 50 50)"><g clip-path="url(#t)"><circle class="t" cx="44" cy="50" r="38"/></g><g transform="translate(11 0)"><g clip-path="url(#b)"><circle class="b" cx="44" cy="50" r="38"/></g></g></g></g></svg>

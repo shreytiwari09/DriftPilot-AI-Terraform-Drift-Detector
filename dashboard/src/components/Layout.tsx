@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode, useId } from 'react';
 import { dateTime } from '../lib/format';
 import { scanLamp, type LampTone } from '../lib/lamp';
 import { PAGES, type Page } from '../lib/route';
@@ -29,11 +29,32 @@ interface Props {
   children: ReactNode;
 }
 
-/** The product mark: a flat compass glyph and the name, one solid colour. */
+/** The product mark: a disc cut by a tilted line, the lower half slipped sideways (a whole that drifted). */
+function LogoMark({ className = '' }: { className?: string }) {
+  const id = useId().replace(/:/g, '');
+  return (
+    <svg viewBox="0 0 94.3 80.2" aria-hidden="true" className={className}>
+      <defs>
+        <clipPath id={`${id}t`}><rect x="-300" y="-300" width="700" height="347.9" /></clipPath>
+        <clipPath id={`${id}b`}><rect x="-300" y="52.1" width="700" height="400" /></clipPath>
+      </defs>
+      <g transform="translate(-2.36 -10.05)">
+        <g transform="rotate(-20 50 50)">
+          <g clipPath={`url(#${id}t)`}><circle cx="44" cy="50" r="38" fill="currentColor" /></g>
+          <g transform="translate(11 0)">
+            <g clipPath={`url(#${id}b)`}><circle cx="44" cy="50" r="38" fill="rgb(var(--brand))" /></g>
+          </g>
+        </g>
+      </g>
+    </svg>
+  );
+}
+
+/** The product name: the mark and the wordmark. */
 function Logo({ className = '' }: { className?: string }) {
   return (
-    <span className={`inline-flex items-center gap-2 text-ink ${className}`}>
-      <Icon name="compass" className="h-5 w-5" />
+    <span className={`inline-flex items-center gap-2.5 text-ink ${className}`}>
+      <LogoMark className="h-6 w-auto" />
       <span className="text-base font-medium leading-none">DriftPilot</span>
     </span>
   );
