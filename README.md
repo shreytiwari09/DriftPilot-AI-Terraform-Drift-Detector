@@ -10,12 +10,12 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.1-1f6feb" alt="version 2.0.1">
+  <img src="https://img.shields.io/badge/version-2.1.0-1f6feb" alt="version 2.1.0">
   <img src="https://img.shields.io/badge/GitHub%20Action-composite-2088FF?logo=githubactions&logoColor=white" alt="GitHub Action">
   <img src="https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
   <img src="https://img.shields.io/badge/terraform-%E2%89%A5%201.5-7B42BC?logo=terraform&logoColor=white" alt="Terraform 1.5+">
   <img src="https://img.shields.io/badge/postgres-16-4169E1?logo=postgresql&logoColor=white" alt="Postgres">
-  <img src="https://img.shields.io/badge/tests-764%20passing%20(%2B26%20need%20Postgres)-2ea44f" alt="764 tests passing, 26 more need a live Postgres">
+  <img src="https://img.shields.io/badge/tests-818%20passing%20(%2B26%20need%20Postgres)-2ea44f" alt="818 tests passing, 26 more need a live Postgres">
   <img src="https://img.shields.io/badge/AI-Gemini%20Flash--Lite-8E75B2" alt="Gemini Flash-Lite">
 </p>
 
@@ -254,6 +254,27 @@ python scripts/simulate_history.py --out /tmp/history
 driftpilot report --history /tmp/history --html /tmp/site && open /tmp/site/index.html
 ```
 
+## Observability
+
+The dashboard is **near real time, not streaming**. Its data changes only when a scan runs, so there are a few waits in a row:
+
+| Step | Delay |
+| --- | --- |
+| A cloud change event reaches the workflow (event-triggered run) | about 15 seconds, then 1 to 2 minutes for the scan |
+| Scheduled run | every `dashboard.scan_every_hours` (default 6); a change waits up to that long |
+| GitHub Pages deploys the new `data.json` | about 1 minute |
+| The page re-reads `data.json` | every 5 minutes (the refresh button does it now) |
+
+What the page and the files add on top of the drift list:
+
+- **Needs attention** (top of Overview): open drift, most serious and oldest first, flagged when it is past its deadline (`dashboard.sla_hours`, default critical 24 h, high 72 h, medium 168 h, low none).
+- **Scans page**: is DriftPilot itself running on time? Per repo, environment and type: last scan, runs in 24 h and 7 d, errors, longest gap, and a status (on time up to 1.5x the expected interval, late up to 3x, stale beyond). The header lamp uses the same thresholds. The page cannot pause or resume scans; it links to the workflow page on GitHub, where Disable workflow / Enable workflow / Run workflow do it.
+- **Change against the previous period** on Open drift, Drift rate and Mean time to resolve, when a 7, 30 or 90 day range is chosen.
+- **Guardrails page**: "Measured effectiveness" from the saved evaluation (24 adversarial cases, one model, labels written by the same author as the rules: a measurement, not a security proof).
+- **Notifications** (new, optional): a message for new drift (only findings not in the stream's previous run, at `min_severity` or above), for a verdict-monitor alert when it first appears, and for a failed scan. Set `webhook-url` in the Action (a secret) and, if wanted, a `notifications:` block (see Settings). `slack` sends `{"text": ...}` (also works for Mattermost; for Discord append `/slack` to the webhook URL), `teams` sends `{"text": ...}` for a Teams Workflows "when a webhook request is received" flow, `generic` sends `{"event", "severity", "summary", "url", "time"}`. The URL is never printed, only `https` is accepted, a failed send becomes a note in the run and never fails the scan. Needs the history branch (without it DriftPilot cannot tell what is new); a failed scan is announced either way.
+- **`metrics.prom`** is published next to `data.json` in the Prometheus text format (open and total episodes by severity, team, type and repo; IaC coverage; drift rate; mean time to resolve; overrule ratio; last scan time; scan errors; monitor alerts). Point Prometheus or Grafana Alloy at it; scraping faster than your scan interval adds nothing.
+- **SARIF**: `driftpilot scan --sarif drift.sarif` (also `driftpilot db scan`) writes SARIF 2.1.0, one result per real finding, for GitHub code scanning (`github/codeql-action/upload-sarif`). The Terraform address is a logical location and the scanned folder is the file location; I have not checked how GitHub's code-scanning tab displays results without a real source line.
+
 ## Solution 1: infrastructure drift (Terraform: GitHub, Docker, AWS, Azure)
 
 Everything from version 1 still works (see [Use it](#use-it)). Version 2 adds AWS, Azure and "who changed it":
@@ -489,6 +510,12 @@ ownership:                           # new: who owns what (dashboard filters)
   account: "123456789012"            # stored masked
 dashboard:
   publish_addresses: true            # false: resource addresses become hashes in data.json
+  scan_every_hours: 6                # expected scan interval: on time <= 1.5x, late <= 3x, stale beyond
+  sla_hours: { critical: 24, high: 72, medium: 168, low: null }   # "overdue" deadlines (null = none)
+notifications:                       # new: needs the `webhook-url` input (a secret) or $DRIFTPILOT_WEBHOOK_URL
+  format: slack                      # slack | teams | generic
+  min_severity: high                 # new drift below this is not sent
+  on: [new_drift, monitor_alert, scan_failed]
 database:                            # new: Postgres schema drift
   migrations: migrations
   schemas: [public]
@@ -652,7 +679,6 @@ written for version 2; several of the underlying figures are **vendor reports** 
   - Marketplace and PyPI releases
   - Slack approvals
   - an "Apply Guardian" that warns when a PR would undo a hotfix
-  - SARIF export so findings appear in GitHub's code-scanning tab
 
 ## Development
 
