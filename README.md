@@ -227,10 +227,13 @@ can be bypassed, so the protection is layered, and the deterministic layers hold
 
 ## The dashboard
 
-One static page (no server, no build step) that a team can filter. `driftpilot report --html DIR` writes two files:
-`index.html` and `data.json`. The page loads `data.json` with `fetch`, falls back to a copy embedded in the page (so double-clicking
-the file works), and re-reads the data every 5 minutes.
+A React app (no server: it is static files on GitHub Pages) that a team can filter and use to act. `driftpilot report --html DIR` writes
+the app, `data.json` (the data), `metrics.prom` (for Prometheus or Grafana) and an `index.html` with a copy of the data embedded, so
+double-clicking the file works. The page re-reads `data.json` every 5 minutes. It is **near real time, not streaming**: the data changes
+only when a scan runs and republishes.
 
+- **Pages:** Overview (with a "Needs attention" list of open drift and its deadline), Findings, Teams, Infrastructure vs database, Scans
+  (is DriftPilot itself running on time), Guardrails (with the measured test results) and About (endpoints and setup snippets).
 - **Filters:** date range, team, repo, environment, drift type (infrastructure or database), severity, status (open or resolved),
   decided by (rule, LLM or policy), what the human did with it (accepted or overruled), plus text search.
 - **KPI tiles that follow the filters.** Two come from the **AWS Well-Architected guidance** and are labelled as such:
@@ -245,7 +248,7 @@ the file works), and re-reads the data every 5 minutes.
 - **Who owns it** is decided in this order: a resource tag (`team`, `owner`), a pattern in `.driftpilot.yml`, the CODEOWNERS file, a default
   team, else `unowned`. Account numbers and ARNs are masked, and `dashboard.publish_addresses: false` replaces resource addresses with
   hashes before anything is published.
-- Charts need internet (Chart.js is loaded from a CDN); without it, tiles, filters, table and CSV still work.
+- Everything is bundled (charts and fonts included); the page makes no external requests, only the read of `data.json`.
 
 Preview it from simulated data (90 days, seed 7, teams and both drift types):
 
@@ -658,7 +661,7 @@ written for version 2; several of the underlying figures are **vendor reports** 
 - **Imports:** some resources can't be imported without being recreated (e.g. a Docker container's `env`). Verification rejects these, and they become issues.
 - **State:** the demo commits Terraform state to git. Real use needs a remote backend with locking.
 - **Instant runs:** the demo uses a small relay workflow. In production that would be an org webhook or GitHub App, or CloudTrail with EventBridge on AWS (template provided, untested).
-- **Dashboard:** charts need internet (Chart.js CDN); the public dashboard is public, so publish only aggregate data (account numbers and ARNs are masked, addresses can be hashed).
+- **Dashboard:** the public dashboard is public, so publish only aggregate data (account numbers and ARNs are masked, addresses can be hashed).
 - **Kubernetes drift and data-file drift are future work** (see the roadmap), not features.
 
 ## Roadmap
