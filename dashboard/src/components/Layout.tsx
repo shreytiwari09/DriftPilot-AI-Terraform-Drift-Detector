@@ -94,7 +94,7 @@ export default function Layout({ page, data, state, repoFilter, period, hrefFor,
           <nav aria-label="Pages" className="flex flex-col gap-0.5">
             {PAGES.map((p) => <NavLink key={p} p={p} page={page} href={hrefFor(p)} />)}
           </nav>
-          <p className="mt-auto px-3 text-xs leading-4 text-mute">Read-only. Reads <span className="font-mono">data.json</span> and refreshes every 5 minutes</p>
+          <p className="mt-auto px-3 text-xs leading-4 text-mute">Read-only unless you connect a token on the Scans page. Reads <span className="font-mono">data.json</span> every 5 minutes</p>
         </div>
       </aside>
 

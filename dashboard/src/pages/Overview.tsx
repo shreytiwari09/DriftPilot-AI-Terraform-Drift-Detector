@@ -116,7 +116,7 @@ export default function Overview({ data, filters, eps, kpis, open }: PageProps) 
             </div>
           )}
         </Card>
-        <Card title="Take action on GitHub" subtitle="Links only. This page holds no tokens and changes nothing" className="xl:col-span-2">
+        <Card title="Take action on GitHub" subtitle="Links only. These buttons open GitHub. Only the optional control on the Scans page can change anything, and only after you connect a token" className="xl:col-span-2">
           {links.scan || links.settings || links.source ? (
             <div className="grid gap-4 sm:grid-cols-3">
               <ActionButton href={links.scan} icon="play" label="Run a scan now" hint="What happens when I click: opens this repo's workflow page on GitHub. GitHub asks you to log in, then you press its own Run workflow button. DriftPilot only scans and reports." />

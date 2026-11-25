@@ -60,6 +60,34 @@ function Integrations() {
   );
 }
 
+const TOKEN_STEPS = [
+  'On GitHub, open your profile picture, then Settings, then Developer settings, then Personal access tokens, then Fine-grained tokens, then Generate new token.',
+  'Name it (for example "DriftPilot pause"). Set Expiration to 7 days.',
+  'Resource owner: choose the organisation or account that owns the DriftPilot repository.',
+  'Repository access: choose Only select repositories, then pick the DriftPilot repository and nothing else.',
+  'Permissions, then Repository permissions, then Actions: set it to Read and write. Metadata (read) is added automatically. Leave everything else at No access.',
+  'Click Generate token and copy it once. GitHub never shows it again.',
+  'Open the Scans page, choose Control from this page, paste the token and press Connect.',
+  'When you are done, press Disconnect, then delete the token under Settings, Developer settings, Fine-grained tokens.',
+];
+
+/** How to make the narrow token the Scans page control needs. */
+function PauseGuide() {
+  return (
+    <Card title="Pause and resume from the page" subtitle="Optional. Without a token this page cannot change anything">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <ol className="list-decimal space-y-2 pl-5 text-sm text-ink2">{TOKEN_STEPS.map((t) => <li key={t}>{t}</li>)}</ol>
+        <div className="space-y-3 text-sm text-ink2">
+          <p><span className="font-medium text-ink">Do not reuse a broad admin token.</span> Anyone who gets this token can pause or start your scans, so make one that can do only that, for one repository, for a few days.</p>
+          <p>If your repository belongs to an organisation, it may require an owner to approve fine-grained tokens before they work. If Connect says the token cannot see the repository, ask an owner to approve it.</p>
+          <p>The page sends the token to api.github.com and nowhere else. It is kept in this tab&apos;s memory only: reloading the page, leaving the Scans page or pressing Disconnect forgets it.</p>
+          <p>The workflow file must allow manual runs (<span className="font-mono">workflow_dispatch</span>) for Run a scan now to work.</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 export default function About({ data }: PageProps) {
   return (
     <div className="stagger space-y-6">
@@ -84,8 +112,9 @@ export default function About({ data }: PageProps) {
         <Card title="Words used on this page"><dl className="space-y-4 text-sm">{GLOSSARY.map(([t, d]) => <div key={t}><dt className="font-medium">{t}</dt><dd className="text-ink2">{d}</dd></div>)}</dl></Card>
         <Card title="Safe by design">
           <ul className="list-disc space-y-2 pl-5 text-sm text-ink2">
-            <li>This page is read-only. It holds <span className="font-medium text-ink">no tokens and no secrets</span>.</li>
-            <li>Buttons are plain links to github.com. GitHub asks you to log in and approve; DriftPilot itself never changes anything.</li>
+            <li>By default this page is read-only. It <span className="font-medium text-ink">holds no token and changes nothing</span>.</li>
+            <li>The one exception is the optional control on the Scans page. It can change GitHub only after you paste a token, keeps that token in this tab&apos;s memory and forgets it on reload.</li>
+            <li>Buttons are plain links to github.com. GitHub asks you to log in and approve. Apart from the optional control, the only address this page fetches is its own <span className="font-mono">data.json</span>, and the page&apos;s content policy blocks every other destination except api.github.com.</li>
             <li>The &quot;suggested command&quot; is text to copy. It is never run by this page.</li>
             <li>Account IDs and ARNs are masked before they reach <code className="font-mono">data.json</code>.</li>
             <li>Webhook messages carry only already-masked text, and the webhook URL is read from a secret and never printed.</li>
@@ -93,6 +122,7 @@ export default function About({ data }: PageProps) {
           </ul>
         </Card>
       </div>
+      <PauseGuide />
       <Integrations />
       <Card title="This data">
         <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">

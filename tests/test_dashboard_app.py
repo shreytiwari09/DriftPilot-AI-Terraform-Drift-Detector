@@ -155,3 +155,67 @@ def test_report_html_writes_the_app_and_data(tmp_path: Path) -> None:
     assert (out / "index.html").exists() and (out / "data.json").exists()
     assert list((out / "assets").glob("*.js")) and list((out / "assets").glob("*.css"))
     assert embedded((out / "index.html").read_text()) == json.loads((out / "data.json").read_text())
+
+
+# ---- the optional pause control (Phase 6e) ----
+
+CSP = """<meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://api.github.com" />"""
+
+
+def test_the_page_may_only_connect_to_itself_and_the_github_api() -> None:
+    source = (ROOT / "dashboard/index.html").read_text()
+    assert CSP in source
+    shipped = app_files()["index.html"]
+    assert CSP in shipped
+    policies = re.findall(r'http-equiv="Content-Security-Policy" content="([^"]*)"', shipped)
+    assert policies == ["connect-src 'self' https://api.github.com"]  # only this one directive
+    # the site made from it keeps the policy, so a published dashboard has it too
+    assert CSP in site()["index.html"]
+
+
+def test_the_control_keeps_the_token_out_of_storage_urls_and_logs() -> None:
+    src = ROOT / "dashboard/src"
+    control = [
+        src / "lib/githubControl.ts",
+        src / "lib/controlState.ts",
+        src / "components/PauseControl.tsx",
+        src / "pages/Scans.tsx",
+    ]
+    banned = re.compile(
+        r"localStorage|sessionStorage|indexedDB|document\.cookie|console\.|location\.hash|"
+        r"history\.(push|replace)State|sendBeacon|XMLHttpRequest|WebSocket"
+    )
+    for path in control:
+        assert not banned.search(path.read_text()), path.name
+    # the only storage use in the whole app is the theme choice
+    users = [
+        p.name
+        for p in src.rglob("*.ts*")
+        if re.search(r"localStorage|sessionStorage|document\.cookie", p.read_text())
+    ]
+    assert users == ["theme.tsx"]
+
+
+def test_the_control_calls_only_the_github_api_and_never_puts_the_token_in_a_url() -> None:
+    text = (ROOT / "dashboard/src/lib/githubControl.ts").read_text()
+    code = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    code = re.sub(r"^\s*//.*$", "", code, flags=re.M)
+    assert re.findall(r"https?://[^\s'\"`)]+", code) == ["https://api.github.com"]
+    for line in code.splitlines():
+        if re.search(r"\$\{\s*token\b", line):
+            assert "Bearer ${token}" in line, line
+    assert "export function workflowUrl(t: ControlTarget" in code  # takes no token
+
+
+def test_the_built_app_has_the_control_and_no_other_destination() -> None:
+    js = "\n".join(t for p, t in app_files().items() if p.endswith(".js"))
+    assert "https://api.github.com" in js and "Control from this page" in js
+    assert "Anyone with the token can pause your scans" in js
+
+
+def test_the_wording_says_read_only_by_default_with_one_optional_exception() -> None:
+    text = "\n".join(p.read_text() for p in (ROOT / "dashboard/src").rglob("*.tsx"))
+    assert "This page holds no tokens and changes nothing" not in text
+    assert "By default this page is read-only" in text
+    assert "optional control on the Scans page" in text
+    assert "Read-only unless you connect a token on the Scans page" in text
