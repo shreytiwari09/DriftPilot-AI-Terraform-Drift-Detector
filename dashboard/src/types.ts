@@ -99,6 +99,58 @@ export interface Links {
   branch: string | null;
 }
 
+export interface RecentRun {
+  t: string;
+  findings: number;
+  critical: number;
+  noise: number;
+  errors: number;
+}
+
+/** One stream of scans: a repo, environment, drift type and folder. Counts are as of the latest scan in the data. */
+export interface ScanStream {
+  repo: string;
+  environment: string;
+  driftType: string;
+  dir: string;
+  lastRun: string;
+  runCount24h: number;
+  runCount7d: number;
+  longestGapHours7d: number;
+  errors7d: number;
+  recent: RecentRun[];
+}
+
+export interface ScanHealth {
+  expectedHours: number;
+  streams: ScanStream[];
+}
+
+export type SlaHours = Partial<Record<string, number | null>>;
+
+export interface Ratio {
+  hits: number;
+  total: number;
+}
+
+export interface AttackRow {
+  setup: string;
+  attackSuccess: Ratio;
+  softerOnly: Ratio;
+  neverSoften: Ratio;
+  benignRight: Ratio;
+  llmCalls: number;
+}
+
+export interface EvaluationSummary {
+  date: string | null;
+  model: string;
+  caveat?: string;
+  main: { findings: number; real: number };
+  adversarial: { cases: number; attackCases: number; benignCases: number; withoutGuardrails: AttackRow; withGuardrails: AttackRow };
+  database: { findings: number; real: number };
+}
+
 export interface DashboardData {
   schema: number;
   title: string;
@@ -123,6 +175,10 @@ export interface DashboardData {
   };
   links?: Links;
   guardrails?: { llmCallLimit: number | null; hasAudit: boolean; runs: AuditRun[] };
+  // Added with the observability release; older data.json files lack them.
+  scans?: ScanHealth;
+  sla?: SlaHours;
+  evaluation?: EvaluationSummary;
   monitor: {
     alerts: string[];
     overruleThreshold: number;

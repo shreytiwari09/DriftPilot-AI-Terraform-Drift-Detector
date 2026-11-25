@@ -7,18 +7,27 @@ const NOW = new Date('2026-11-25T12:00:00Z');
 const hoursAgo = (h: number) => new Date(NOW.getTime() - h * 3_600_000).toISOString();
 
 describe('status lamp', () => {
-  it('is green up to 8 hours and says how long ago', () => {
-    expect(scanLamp(hoursAgo(2), null, NOW)).toEqual({ tone: 'fresh', label: 'Checked 2 h ago' });
-    expect(scanLamp(hoursAgo(8), null, NOW).tone).toBe('fresh');
+  it('is green up to 1.5x the cadence and says how long ago (cadence 6 h)', () => {
+    expect(scanLamp(hoursAgo(2), null, NOW)).toEqual({ tone: 'fresh', label: 'Last scan 2 h ago', paused: false });
+    expect(scanLamp(hoursAgo(9), null, NOW).tone).toBe('fresh');
   });
-  it('is grey between 8 and 12 hours and amber after 12', () => {
-    expect(scanLamp(hoursAgo(10), null, NOW).tone).toBe('aging');
-    expect(scanLamp(hoursAgo(12.5), null, NOW).tone).toBe('stale');
-    expect(scanLamp(hoursAgo(30), null, NOW).label).toBe('Checked 30 h ago');
-    expect(scanLamp(hoursAgo(72), null, NOW).label).toBe('Checked 3 d ago');
+  it('is grey up to 3x and amber beyond, with a paused hint only past 3x (cadence 6 h)', () => {
+    expect(scanLamp(hoursAgo(10), null, NOW)).toMatchObject({ tone: 'aging', paused: false });
+    expect(scanLamp(hoursAgo(18), null, NOW).tone).toBe('aging');
+    expect(scanLamp(hoursAgo(18.5), null, NOW)).toMatchObject({ tone: 'stale', paused: true });
+    expect(scanLamp(hoursAgo(30), null, NOW).label).toBe('Last scan 30 h ago');
+    expect(scanLamp(hoursAgo(72), null, NOW).label).toBe('Last scan 3 d ago');
+  });
+  it('scales with the cadence: a 12 h schedule is green to 18 h, grey to 36 h, amber after', () => {
+    expect(scanLamp(hoursAgo(15), null, NOW, 12).tone).toBe('fresh');
+    expect(scanLamp(hoursAgo(15), null, NOW, 6).tone).toBe('aging');
+    expect(scanLamp(hoursAgo(18), null, NOW, 12).tone).toBe('fresh');
+    expect(scanLamp(hoursAgo(20), null, NOW, 12)).toMatchObject({ tone: 'aging', paused: false });
+    expect(scanLamp(hoursAgo(36), null, NOW, 12).tone).toBe('aging');
+    expect(scanLamp(hoursAgo(37), null, NOW, 12)).toMatchObject({ tone: 'stale', paused: true });
   });
   it('is neutral and says Simulated when the data note says so, whatever the age', () => {
-    expect(scanLamp(hoursAgo(1), 'Simulated 90-day history (seed 7), not real data.', NOW)).toEqual({ tone: 'simulated', label: 'Simulated' });
+    expect(scanLamp(hoursAgo(1), 'Simulated 90-day history (seed 7), not real data.', NOW)).toEqual({ tone: 'simulated', label: 'Simulated', paused: false });
     expect(scanLamp(hoursAgo(500), 'simulated', NOW).tone).toBe('simulated');
   });
   it('does not pretend when there is no scan time', () => {
