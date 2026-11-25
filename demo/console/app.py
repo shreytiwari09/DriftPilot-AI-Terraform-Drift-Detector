@@ -16,7 +16,11 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import backend  # noqa: E402
 
-st.set_page_config(page_title="DriftPilot demo", page_icon="🧭", layout="wide")
+st.set_page_config(
+    page_title="DriftPilot demo",
+    page_icon=str(Path(__file__).resolve().parents[2] / "assets" / "logo-avatar.png"),
+    layout="wide",
+)
 
 
 @st.cache_resource
@@ -27,7 +31,7 @@ def credentials() -> dict[str, bool]:
 checks = credentials()
 
 # ---------- header + sidebar ----------
-st.title("🧭 DriftPilot")
+st.title("DriftPilot")
 st.caption(
     "Catches hand-made changes to infrastructure, judges how much they matter, and proposes fixes "
     "that Terraform has proven correct. It runs as a GitHub Action; this page only drives the demo."
