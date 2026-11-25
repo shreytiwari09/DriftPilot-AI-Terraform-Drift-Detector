@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { FILTER_KEYS, type Filters } from '../types';
 
-export const PAGES = ['overview', 'findings', 'teams', 'split', 'guardrails', 'about'] as const;
+export const PAGES = ['overview', 'findings', 'teams', 'split', 'scans', 'guardrails', 'about'] as const;
 export type Page = (typeof PAGES)[number];
 
 export interface Route {

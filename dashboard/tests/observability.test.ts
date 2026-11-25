@@ -143,3 +143,25 @@ describe('trend deltas', () => {
     expect(trendDeltas(data.episodes, data.runs, { from: '2026-07-26' }, data.asOf, now)).toBeNull();
   });
 });
+
+import { endpoints, prometheusConfig } from '../src/lib/endpoints';
+
+describe('integration endpoints', () => {
+  it('works out the published files from the page address', () => {
+    const e = endpoints('https://driftpilot-demo.github.io/drift-dashboard/#/about');
+    expect(e.hosted).toBe(true);
+    expect(e.dataUrl).toBe('https://driftpilot-demo.github.io/drift-dashboard/data.json');
+    expect(e.metricsUrl).toBe('https://driftpilot-demo.github.io/drift-dashboard/metrics.prom');
+    expect(prometheusConfig(e)).toContain("metrics_path: /drift-dashboard/metrics.prom");
+    expect(prometheusConfig(e)).toContain("targets: ['driftpilot-demo.github.io']");
+    expect(prometheusConfig(e)).toContain('scheme: https');
+  });
+  it('uses placeholders when opened from disk or over http', () => {
+    for (const href of ['file:///Users/me/site/index.html', 'http://localhost:8000/', 'not a url']) {
+      const e = endpoints(href);
+      expect(e.hosted).toBe(false);
+      expect(e.dataUrl).toBe('data.json');
+      expect(e.host).toBe('<owner>.github.io');
+    }
+  });
+});

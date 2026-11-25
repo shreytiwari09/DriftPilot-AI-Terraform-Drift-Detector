@@ -142,13 +142,24 @@ export interface AttackRow {
   llmCalls: number;
 }
 
+export interface EvalSetup {
+  setup: string;
+  noiseFiltered: number | null;
+  realFound: number | null;
+  severityRight: number | null;
+  criticalCaught: number | null;
+  actionRight: number | null;
+  falseAlarms: number | null;
+  llmCalls: number;
+}
+
 export interface EvaluationSummary {
   date: string | null;
   model: string;
   caveat?: string;
-  main: { findings: number; real: number };
+  main: { findings: number; real: number; setups: EvalSetup[] };
   adversarial: { cases: number; attackCases: number; benignCases: number; withoutGuardrails: AttackRow; withGuardrails: AttackRow };
-  database: { findings: number; real: number };
+  database: { findings: number; real: number; setups: EvalSetup[] };
 }
 
 export interface DashboardData {

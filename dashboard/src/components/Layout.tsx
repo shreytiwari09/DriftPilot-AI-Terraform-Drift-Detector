@@ -1,23 +1,24 @@
-import { useEffect, useState, type ReactNode, useId } from 'react';
+import { useId, type ReactNode } from 'react';
 import { dateTime } from '../lib/format';
-import { scanLamp, type LampTone } from '../lib/lamp';
+import { cadenceOf, latestScan, nextExpected } from '../lib/scans';
+import { useNow } from '../lib/useNow';
+import { scanLamp } from '../lib/lamp';
 import { PAGES, type Page } from '../lib/route';
 import { useTheme } from '../lib/theme';
 import { actionLinks } from '../lib/url';
 import type { DataState } from '../lib/useData';
 import type { DashboardData } from '../types';
-import { ExternalLink, Icon, type IconName } from './ui';
+import { ExternalLink, Icon, LAMP_DOT, type IconName } from './ui';
 
 const NAV: Record<Page, { label: string; title: string; icon: IconName }> = {
   overview: { label: 'Overview', title: 'Overview', icon: 'overview' },
   findings: { label: 'Findings', title: 'Findings', icon: 'findings' },
   teams: { label: 'Teams', title: 'Teams', icon: 'teams' },
   split: { label: 'Infra vs Database', title: 'Infrastructure vs database', icon: 'split' },
+  scans: { label: 'Scans', title: 'Scans', icon: 'activity' },
   guardrails: { label: 'Guardrails', title: 'Guardrails', icon: 'shield' },
   about: { label: 'About', title: 'About', icon: 'info' },
 };
-
-const LAMP_DOT: Record<LampTone, string> = { fresh: 'bg-ok', aging: 'bg-low', stale: 'bg-med', simulated: 'bg-low' };
 
 interface Props {
   page: Page;
@@ -73,14 +74,17 @@ function NavLink({ p, page, href, mobile }: { p: Page; page: Page; href: string;
 
 export default function Layout({ page, data, state, repoFilter, period, hrefFor, children }: Props) {
   const { dark, toggle } = useTheme();
-  const [now, setNow] = useState(new Date());
-  useEffect(() => {
-    const t = window.setInterval(() => setNow(new Date()), 30_000);
-    return () => window.clearInterval(t);
-  }, []);
+  const now = useNow();
   const links = actionLinks(data.links, repoFilter);
-  const lamp = scanLamp(data.generated, data.note, now);
-  const lampTitle = `Data generated ${dateTime(data.generated)}${data.asOf ? `. Latest scan in it: ${dateTime(data.asOf)}` : ''}${state.source === 'embedded' ? '. Showing the embedded copy' : ''}`;
+  const cadence = cadenceOf(data);
+  const last = latestScan(data);
+  const lamp = scanLamp(last, data.note, now, cadence);
+  const lampTitle = [
+    `Last scan ${dateTime(last)}`,
+    `Expected every ${cadence} h${last ? `; next about ${dateTime(nextExpected(last, cadence).toISOString())}` : ''}`,
+    `Data generated ${dateTime(data.generated)}. It changes only when a scan runs, not live${state.source === 'embedded' ? '. Showing the embedded copy' : ''}`,
+    ...(lamp.paused ? [`Scans paused? The last scan is older than 3 x the expected interval (${3 * cadence} h). Check the schedule on the Scans page`] : []),
+  ].join('\n');
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[240px_1fr]">

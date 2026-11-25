@@ -1,11 +1,13 @@
 import { useState, type ReactNode } from 'react';
+import type { LampTone } from '../lib/lamp';
+import type { Delta, Tone } from '../lib/trend';
 import { safeGithubUrl } from '../lib/url';
 import { SEVERITIES } from '../types';
 
 export type IconName =
   | 'overview' | 'findings' | 'teams' | 'split' | 'shield' | 'info' | 'sun' | 'moon' | 'refresh'
   | 'external' | 'download' | 'close' | 'filter' | 'copy' | 'check' | 'play' | 'edit' | 'github'
-  | 'arrow-up' | 'arrow-down' | 'search' | 'alert' | 'chevron-down' | 'pr' | 'issue' | 'compass' | 'arrow-right';
+  | 'arrow-up' | 'arrow-down' | 'search' | 'alert' | 'chevron-down' | 'pr' | 'issue' | 'compass' | 'arrow-right' | 'activity';
 
 // Lucide line icons (ISC licence): 24 grid, drawn at 16px with a 1.5 stroke.
 const PATHS: Record<IconName, ReactNode> = {
@@ -35,6 +37,7 @@ const PATHS: Record<IconName, ReactNode> = {
   'chevron-down': <path d="m6 9 6 6 6-6" />,
   pr: <><circle cx="18" cy="18" r="3" /><circle cx="6" cy="6" r="3" /><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12" /></>,
   issue: <><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="1" /></>,
+  activity: <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />,
   compass: <><circle cx="12" cy="12" r="10" /><path d="m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z" /></>,
 };
 
@@ -45,6 +48,9 @@ export function Icon({ name, className = 'h-4 w-4' }: { name: IconName; classNam
     </svg>
   );
 }
+
+/** The status lamp's dot colour per tone (header, Overview and Scans). */
+export const LAMP_DOT: Record<LampTone, string> = { fresh: 'bg-ok', aging: 'bg-low', stale: 'bg-med', simulated: 'bg-low' };
 
 const SEV_DOT: Record<string, string> = { critical: 'bg-crit', high: 'bg-high', medium: 'bg-med', low: 'bg-low' };
 
@@ -99,7 +105,19 @@ export function Card({ title, subtitle, action, children, className = '', flush 
 }
 
 /** A number, its label and what it is compared to. The longer explanation lives in a tooltip. */
-export function StatCard({ label, value, detail, hint, aws, accent, bad }: { label: string; value: string; detail?: string; hint: string; aws?: boolean; accent?: boolean; bad?: boolean }) {
+const DELTA_TONE: Record<Tone, string> = { worse: 'text-crit', better: 'text-ok', same: 'text-mute' };
+
+/** A change against the previous period: arrow, signed text; colour only when it got worse or better. */
+export function DeltaLine({ delta }: { delta: Delta }) {
+  return (
+    <p className={`flex items-center gap-1 text-xs ${DELTA_TONE[delta.tone]}`}>
+      {delta.direction !== 'flat' && <Icon name={delta.direction === 'up' ? 'arrow-up' : 'arrow-down'} className="h-3 w-3" />}
+      {delta.text}
+    </p>
+  );
+}
+
+export function StatCard({ label, value, detail, hint, aws, accent, bad, delta }: { label: string; value: string; detail?: string; hint: string; aws?: boolean; accent?: boolean; bad?: boolean; delta?: Delta | null }) {
   return (
     <div className="card flex h-full flex-col gap-2 p-4 sm:p-5" title={hint}>
       <h3 className="text-[13px] text-ink2">
@@ -107,6 +125,7 @@ export function StatCard({ label, value, detail, hint, aws, accent, bad }: { lab
         {aws && <sup className="ml-1 font-mono text-[11px] text-mute" aria-label="AWS Well-Architected metric">†</sup>}
       </h3>
       <p className={`fig text-[28px] font-medium leading-8 ${accent ? 'text-brand-ink' : bad ? 'text-crit' : ''}`}>{value}</p>
+      {delta && <DeltaLine delta={delta} />}
       <p className="text-xs text-mute">{detail ?? ' '}</p>
       <span className="sr-only">{hint}</span>
     </div>

@@ -11,11 +11,12 @@ import About from './pages/About';
 import Findings from './pages/Findings';
 import Guardrails from './pages/Guardrails';
 import Overview from './pages/Overview';
+import Scans from './pages/Scans';
 import Split from './pages/Split';
 import Teams from './pages/Teams';
 import type { Episode, Filters } from './types';
 
-const PAGE_COMPONENTS = { overview: Overview, findings: Findings, teams: Teams, split: Split, guardrails: Guardrails, about: About };
+const PAGE_COMPONENTS = { overview: Overview, findings: Findings, teams: Teams, split: Split, scans: Scans, guardrails: Guardrails, about: About };
 
 export default function App() {
   const state = useData();

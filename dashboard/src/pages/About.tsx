@@ -1,4 +1,5 @@
-import { Card, OriginLabel, type MetricOrigin } from '../components/ui';
+import { Card, CopyButton, OriginLabel, type MetricOrigin } from '../components/ui';
+import { SARIF_COMMAND, SARIF_STEP, WEBHOOK_CONFIG, WEBHOOK_STEP, endpoints, prometheusConfig } from '../lib/endpoints';
 import { dateTime } from '../lib/format';
 import type { PageProps } from './shared';
 
@@ -17,8 +18,47 @@ const GLOSSARY: [string, string][] = [
   ['Episode', 'One stretch of consecutive scans where the same setting stayed drifted. If it is fixed and drifts again, that is a new episode.'],
   ['Decided by', 'Who judged the finding: a rule from the rule pack, the AI model (llm), or a policy/guardrail override.'],
   ['Human outcome', 'accepted = a person acted on it, overruled = a person said it was wrong, pending = nobody reacted yet.'],
+  ['Overdue', 'Open drift older than its deadline. Defaults: critical 24 h, high 72 h, medium 7 d, low none (dashboard.sla_hours). The age counts from the first scan that saw it.'],
+  ['Scan status', 'On time: the last scan is at most 1.5 times the expected interval old. Late: up to 3 times. Stale: older (scans have probably stopped).'],
+  ['Change vs previous period', 'With a 7, 30 or 90 day range chosen, a card compares itself with the window of the same length just before. Red means worse, green better.'],
   ['Unmanaged', 'Resources that exist in the cloud account or repo but are not in Terraform at all.'],
 ];
+
+function Snippet({ title, text, copyLabel }: { title: string; text: string; copyLabel?: string }) {
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between gap-3">
+        <h4 className="text-[13px] text-ink2">{title}</h4>
+        <CopyButton text={text} label={copyLabel} />
+      </div>
+      <pre className="scroll-x rounded-lg bg-sunken p-3 font-mono text-xs leading-5 text-ink"><code>{text}</code></pre>
+    </div>
+  );
+}
+
+/** Where other tools can read DriftPilot's results. All of it changes only when a scan runs. */
+function Integrations() {
+  const e = endpoints(window.location.href);
+  return (
+    <Card title="Integrations" subtitle="Everything here is as fresh as the last scan, not live. Scraping more often than the scan interval adds nothing">
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-4">
+          <Snippet title="data.json: all of this page's data" text={e.dataUrl} copyLabel="Copy URL" />
+          <Snippet title="metrics.prom: Prometheus text format, for Grafana" text={e.metricsUrl} copyLabel="Copy URL" />
+          <Snippet title="Prometheus scrape config" text={prometheusConfig(e)} />
+          {!e.hosted && <p className="text-xs text-mute">Opened from disk: replace the placeholders with your GitHub Pages address.</p>}
+        </div>
+        <div className="space-y-4">
+          <Snippet title="Webhook (Slack, Mattermost, Teams Workflows, any https endpoint): .driftpilot.yml" text={WEBHOOK_CONFIG} />
+          <Snippet title="Webhook secret: workflow step" text={WEBHOOK_STEP} />
+          <p className="text-xs text-mute">Create the repository secret <span className="font-mono">DRIFTPILOT_WEBHOOK_URL</span> under Settings, Secrets and variables, Actions. Only new drift is sent, once, plus a new verdict-monitor alert and a failed scan. The URL is never printed.</p>
+          <Snippet title="SARIF for GitHub code scanning" text={SARIF_COMMAND} />
+          <Snippet title="SARIF: upload step" text={SARIF_STEP} />
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 export default function About({ data }: PageProps) {
   return (
@@ -48,10 +88,12 @@ export default function About({ data }: PageProps) {
             <li>Buttons are plain links to github.com. GitHub asks you to log in and approve; DriftPilot itself never changes anything.</li>
             <li>The &quot;suggested command&quot; is text to copy. It is never run by this page.</li>
             <li>Account IDs and ARNs are masked before they reach <code className="font-mono">data.json</code>.</li>
+            <li>Webhook messages carry only already-masked text, and the webhook URL is read from a secret and never printed.</li>
             <li>Filters live in the address bar: copy the link to share exactly this view.</li>
           </ul>
         </Card>
       </div>
+      <Integrations />
       <Card title="This data">
         <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div><dt className="label">Generated</dt><dd className="fig">{dateTime(data.generated)}</dd></div>

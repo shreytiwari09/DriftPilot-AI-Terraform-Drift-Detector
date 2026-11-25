@@ -1,14 +1,24 @@
 import { DailyChart, OverruleTrend, SeverityLegend, severityTotals } from '../components/Charts';
 import FindingsTable from '../components/FindingsTable';
+import NeedsAttention from '../components/NeedsAttention';
 import { ActionButton, Card, Empty, MiniStat, RankedBars, StatCard } from '../components/ui';
 import { dateTime, hours, num, pct } from '../lib/format';
 import { countBy, dailyBySeverity, recurringOffenders, weeklyOverrule } from '../lib/logic';
+import { buildHash } from '../lib/route';
+import { trendDeltas } from '../lib/trend';
+import { useNow } from '../lib/useNow';
 import { actionLinks } from '../lib/url';
+import { useMemo } from 'react';
 import { SEVERITIES } from '../types';
 import type { PageProps } from './shared';
 
 export default function Overview({ data, filters, eps, kpis, open }: PageProps) {
+  const now = useNow();
   const links = actionLinks(data.links, filters.repo);
+  const deltas = useMemo(() => trendDeltas(data.episodes, data.runs, filters, data.asOf, kpis), [data, filters, kpis]);
+  const attention = (
+    <NeedsAttention data={data} eps={eps} now={now} onOpen={open} seeAllHref={buildHash({ page: 'findings', filters: { ...filters, status: 'open' }, open: '' })} />
+  );
   const daily = dailyBySeverity(eps, filters, data.asOf);
   const byTeam = [...new Set(eps.map((e) => e.team))].map((team) => {
     const segments: Record<string, number> = {};
@@ -30,12 +40,16 @@ export default function Overview({ data, filters, eps, kpis, open }: PageProps) 
 
   if (!data.episodes.length) {
     return (
-      <div className="card"><Empty title="No drift recorded yet" icon="shield">Run DriftPilot at least once. As soon as a scan is saved to the history, this page fills in by itself.</Empty></div>
+      <div className="stagger space-y-6">
+        {attention}
+        <div className="card"><Empty title="No drift recorded yet" icon="shield">Run DriftPilot at least once. As soon as a scan is saved to the history, this page fills in by itself.</Empty></div>
+      </div>
     );
   }
 
   return (
     <div className="stagger space-y-6">
+      {attention}
       {data.monitor.alerts.length > 0 && (
         <div role="alert" className="rounded-xl border border-line bg-surface p-4 text-sm">
           <p className="flex items-center gap-2 font-medium"><span className="h-1.5 w-1.5 rounded-full bg-crit" aria-hidden="true" />Verdict monitor</p>
@@ -46,9 +60,9 @@ export default function Overview({ data, filters, eps, kpis, open }: PageProps) 
       <section aria-label="Key numbers" className="space-y-4">
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           <StatCard label="IaC coverage" value={pct(k.iacCoverage)} aws detail={coverageNote} hint="Share of resources managed by code: managed ÷ (managed + unmanaged). Higher is better." />
-          <StatCard label="Drift rate" value={pct(k.driftRate)} aws detail={`${num(k.driftedResources)} distinct resources drifted`} hint="Distinct drifted resources ÷ managed resources. Lower is better." />
-          <StatCard label="Open drift" value={num(k.openCount)} accent detail={k.oldestOpenHours === null ? 'nothing open' : `oldest open for ${hours(k.oldestOpenHours)}`} hint="Episodes not resolved yet." />
-          <StatCard label="Mean time to resolve" value={hours(k.mttrHours)} detail="first seen to first clean scan" hint="Average time from first seen until the first scan that no longer saw the drift." />
+          <StatCard label="Drift rate" value={pct(k.driftRate)} aws delta={deltas?.driftRate} detail={`${num(k.driftedResources)} distinct resources drifted`} hint="Distinct drifted resources ÷ managed resources. Lower is better." />
+          <StatCard label="Open drift" value={num(k.openCount)} accent delta={deltas?.open} detail={k.oldestOpenHours === null ? 'nothing open' : `oldest open for ${hours(k.oldestOpenHours)}`} hint="Episodes not resolved yet." />
+          <StatCard label="Mean time to resolve" value={hours(k.mttrHours)} delta={deltas?.mttr} detail="first seen to first clean scan" hint="Average time from first seen until the first scan that no longer saw the drift." />
         </div>
         <div>
           <h2 className="mb-2 text-[13px] text-ink2">Trust in DriftPilot</h2>
