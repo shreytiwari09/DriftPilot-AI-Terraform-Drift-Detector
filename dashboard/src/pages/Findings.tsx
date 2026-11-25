@@ -16,12 +16,12 @@ export default function Findings({ eps, open, data }: PageProps) {
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h2 className="h-page">Findings</h2><p className="text-sm text-mute">Every drift episode that matches the filters. Click a row (or press Enter) for the full story.</p></div>
-        <button type="button" className="btn" onClick={download} disabled={!eps.length}><Icon name="download" /> Export CSV ({eps.length.toLocaleString('en-US')})</button>
+    <div className="stagger space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[13px] text-ink2">Select a row (or press Enter) for the full story</p>
+        <button type="button" className="btn" onClick={download} disabled={!eps.length}><Icon name="download" /> Export CSV <span className="fig text-mute">{eps.length.toLocaleString('en-US')}</span></button>
       </div>
-      <Card>
+      <Card flush>
         {data.episodes.length === 0 ? <Empty title="No drift recorded yet">Nothing to list until the first scan is saved.</Empty>
           : eps.length === 0 ? <Empty title="No episodes match these filters">Widen the date range or press Reset in the filter bar.</Empty>
           : <FindingsTable rows={eps} onOpen={open} />}
