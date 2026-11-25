@@ -53,3 +53,25 @@ def test_simulated_audit_is_deterministic_and_has_guardrail_events() -> None:
     for a in audit:
         per_run[a.run_id] = per_run.get(a.run_id, 0) + 1
     assert max(per_run.values()) <= 60  # inside the default budget
+
+
+def test_simulated_scan_health_has_a_late_stream_and_some_errors() -> None:
+    from driftpilot.report.dashboard.data import scan_health
+
+    _, runs = sim.simulate(seed=7, split=True)
+    health = scan_health(runs, max(r.timestamp for r in runs), 6)
+    newest = max(r.timestamp for r in runs)
+    last: dict[str, object] = {}
+    for r in runs:
+        last[r.repo + r.environment] = r.timestamp
+    lag = {k: (newest - t).total_seconds() / 3600 for k, t in last.items()}
+    late = [k for k, g in lag.items() if 6 * 1.5 < g <= 6 * 3]
+    assert late == ["driftpilot-demo/databaseprod"]
+    assert sum(r.errors for r in runs) >= 3
+    assert any(s["errors7d"] for s in health["streams"])
+    assert max(r.errors for r in runs) == 2
+
+
+def test_adding_scan_health_did_not_move_the_planted_data() -> None:
+    events, runs = sim.simulate(seed=7, split=True)
+    assert len(events) == 667 and len(runs) == 1800 - sim.LATE_SLOTS

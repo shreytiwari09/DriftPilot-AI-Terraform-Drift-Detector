@@ -40,6 +40,8 @@ SPIKE_DAY = 60
 SPIKE_EPISODES = 16
 RECENT_DAYS = 14
 RECURRING = ("docker_container.app3", "memory")
+LATE_STREAM = "database-prod"  # stops scanning for the last 2 slots (12 h): shows as late
+LATE_SLOTS = 2
 BASE_RATE = 1.5  # new drift episodes per day
 OVERRULE_BEFORE, OVERRULE_RECENT = 0.10, 0.50
 MANAGED_RESOURCES = 60
@@ -246,6 +248,9 @@ def simulate(days: int = DAYS, seed: int = 7, end: datetime | None = None, split
             for ep in members:
                 events.append(_event(ep, run_id, ts, rng))
             managed = sum(stream.managed.values())
+            noise = rng.randrange(3)  # drawn even for a skipped run, so later draws do not move
+            if split and stream.slug == LATE_STREAM and run >= n_runs - LATE_SLOTS and not members:
+                continue  # this stream's scans have stopped: the Scans page shows it as late
             runs.append(
                 RunRecord(
                     run_id=run_id,
@@ -255,16 +260,25 @@ def simulate(days: int = DAYS, seed: int = 7, end: datetime | None = None, split
                     critical_count=sum(e.severity == "critical" for e in members),
                     distinct_resources=len({e.address for e in members}),
                     unmanaged_count=sum(stream.unmanaged.values()),
-                    noise_count=rng.randrange(3),
+                    noise_count=noise,
                     managed_resource_count=managed if split else MANAGED_RESOURCES,
                     repo=stream.repo,
                     environment=stream.environment,
                     drift_type=stream.drift_type,
                     managed_by_team=stream.managed,
                     unmanaged_by_team=stream.unmanaged,
+                    errors=_errors(run_id, run, stream, n_runs),
                 )
             )
     return events, runs
+
+
+def _errors(run_id: str, run: int, stream: Stream, n_runs: int) -> int:
+    """Scan problems, without touching the random draws: a few runs here and there, and two
+    failing runs of one stream in the last days (so the Scans page has something to show)."""
+    if stream.slug == "infra-staging" and run in (n_runs - 20, n_runs - 5):
+        return 1 if run == n_runs - 20 else 2
+    return 1 if zlib.crc32(run_id.encode()) % 61 == 0 else 0
 
 
 def _event(ep: Episode, run_id: str, ts: datetime, rng: random.Random) -> HistoryEvent:
