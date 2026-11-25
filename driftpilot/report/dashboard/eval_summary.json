@@ -1,0 +1,132 @@
+{
+  "date": "2026-11-24",
+  "model": "gemini-3.1-flash-lite",
+  "main": {
+    "findings": 142,
+    "real": 77,
+    "setups": [
+      {
+        "setup": "raw terraform",
+        "noiseFiltered": 0.0,
+        "realFound": 0.948,
+        "severityRight": 0.0,
+        "criticalCaught": 0.0,
+        "actionRight": 0.0,
+        "falseAlarms": 1.0,
+        "llmCalls": 0
+      },
+      {
+        "setup": "rules only",
+        "noiseFiltered": 0.985,
+        "realFound": 1.0,
+        "severityRight": 0.312,
+        "criticalCaught": 0.739,
+        "actionRight": 0.325,
+        "falseAlarms": 0.015,
+        "llmCalls": 0
+      },
+      {
+        "setup": "rules + cloud LLM",
+        "noiseFiltered": 0.985,
+        "realFound": 1.0,
+        "severityRight": 0.883,
+        "criticalCaught": 0.87,
+        "actionRight": 0.818,
+        "falseAlarms": 0.015,
+        "llmCalls": 46
+      },
+      {
+        "setup": "cloud LLM without rules",
+        "noiseFiltered": 0.892,
+        "realFound": 1.0,
+        "severityRight": 0.896,
+        "criticalCaught": 0.913,
+        "actionRight": 0.818,
+        "falseAlarms": 0.108,
+        "llmCalls": 82
+      }
+    ]
+  },
+  "adversarial": {
+    "cases": 24,
+    "attackCases": 20,
+    "benignCases": 4,
+    "withoutGuardrails": {
+      "setup": "rules + cloud LLM (no guardrails)",
+      "attackSuccess": {
+        "hits": 15,
+        "total": 37
+      },
+      "softerOnly": {
+        "hits": 7,
+        "total": 37
+      },
+      "neverSoften": {
+        "hits": 1,
+        "total": 11
+      },
+      "benignRight": {
+        "hits": 3,
+        "total": 4
+      },
+      "llmCalls": 22
+    },
+    "withGuardrails": {
+      "setup": "rules + cloud LLM + guardrails",
+      "attackSuccess": {
+        "hits": 12,
+        "total": 37
+      },
+      "softerOnly": {
+        "hits": 3,
+        "total": 37
+      },
+      "neverSoften": {
+        "hits": 0,
+        "total": 11
+      },
+      "benignRight": {
+        "hits": 2,
+        "total": 4
+      },
+      "llmCalls": 22
+    }
+  },
+  "database": {
+    "findings": 35,
+    "real": 29,
+    "setups": [
+      {
+        "setup": "raw schema diff",
+        "noiseFiltered": 0.0,
+        "realFound": 1.0,
+        "severityRight": 0.0,
+        "criticalCaught": 0.0,
+        "actionRight": 0.0,
+        "falseAlarms": 1.0,
+        "llmCalls": 0
+      },
+      {
+        "setup": "rules only",
+        "noiseFiltered": 0.833,
+        "realFound": 1.0,
+        "severityRight": 0.724,
+        "criticalCaught": 1.0,
+        "actionRight": 0.724,
+        "falseAlarms": 0.167,
+        "llmCalls": 0
+      },
+      {
+        "setup": "rules + cloud LLM",
+        "noiseFiltered": 0.833,
+        "realFound": 1.0,
+        "severityRight": 0.966,
+        "criticalCaught": 1.0,
+        "actionRight": 1.0,
+        "falseAlarms": 0.167,
+        "llmCalls": 8
+      }
+    ]
+  },
+  "caveat": "Not a security proof. The labels were written by the same author as the rules."
+}
