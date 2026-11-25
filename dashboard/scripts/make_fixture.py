@@ -14,7 +14,12 @@ sys.path.insert(0, str(ROOT))
 
 from driftpilot.history.analytics import analyze, episodes_frame  # noqa: E402
 from driftpilot.history.verdict_monitor import monitor  # noqa: E402
-from driftpilot.report.dashboard.data import build_data, compute_kpis, episodes_csv  # noqa: E402
+from driftpilot.report.dashboard.data import (  # noqa: E402
+    build_data,
+    compute_kpis,
+    episodes_csv,
+    previous_window,
+)
 
 FILTERS = [
     {}, {"team": "payments"}, {"team": "platform", "environment": "prod", "from": "2026-08-15"},
@@ -25,6 +30,26 @@ FILTERS = [
     {"team": "data", "driftType": "database", "status": "open"},
     {"from": "2026-10-20"}, {"to": "2026-07-31"},
 ]  # fmt: skip
+
+
+WINDOW_FILTERS = [
+    {"from": "2026-09-24"}, {"from": "2026-10-17"}, {"from": "2026-07-26"},
+    {"from": "2026-09-24", "team": "payments"}, {"from": "2026-09-24", "driftType": "database"},
+    {"from": "2026-09-24", "to": "2026-10-10"}, {"from": "2026-10-01"}, {"team": "data"},
+]  # fmt: skip
+
+
+def window_cases(data: dict) -> list[dict]:
+    """The previous window and its KPIs (Python), for the page's trend deltas to match."""
+    out = []
+    for f in WINDOW_FILTERS:
+        w = previous_window(f, data["runs"], data["asOf"])
+        kpis = None
+        if w:
+            prev = {**f, "from": w["from"], "to": w["to"]}
+            kpis = compute_kpis(data["episodes"], data["runs"], prev, f"{w['to']}T23:59:59Z")
+        out.append({"filters": f, "window": w, "kpis": kpis})
+    return out
 
 
 def build() -> dict:
@@ -48,6 +73,7 @@ def build() -> dict:
             {"filters": f, "kpis": compute_kpis(data["episodes"], data["runs"], f, data["asOf"])}
             for f in FILTERS
         ],
+        "windowCases": window_cases(data),
         "csvRows": rows,
         "csv": episodes_csv(rows),
     }

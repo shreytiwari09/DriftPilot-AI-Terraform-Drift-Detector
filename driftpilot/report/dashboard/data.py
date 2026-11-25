@@ -345,6 +345,33 @@ def compute_kpis(episodes: list[dict], runs: list[dict], f: dict, as_of: str | N
     }
 
 
+PRESET_DAYS = (7, 30, 90)
+
+
+def previous_window(f: dict, runs: list[dict], as_of: str | None) -> dict | None:
+    """The window of equal length just before a 7, 30 or 90 day preset (None for any other range).
+
+    A preset is `from` = latest scan day minus N and no `to`. The window is None too when the data
+    does not reach back far enough. The page's `previousWindow` (trend.ts) does the same.
+    """
+    if not f.get("from") or f.get("to") or not as_of or not runs:
+        return None
+    last = pd.Timestamp(as_of[:10])
+    start = pd.Timestamp(f["from"])
+    days = next((d for d in PRESET_DAYS if start == last - pd.Timedelta(days=d)), None)
+    if days is None:
+        return None
+    first = min(r["t"] for r in runs)[:10]
+    prev_from = (start - pd.Timedelta(days=days)).strftime("%Y-%m-%d")
+    if prev_from < first:
+        return None
+    return {
+        "days": days,
+        "from": prev_from,
+        "to": (start - pd.Timedelta(days=1)).strftime("%Y-%m-%d"),
+    }
+
+
 REPO_PATTERN = re.compile(r"[\w.-]+/[\w.-]+")
 WORKFLOW_PATTERN = re.compile(r"[\w.-]+\.ya?ml")
 BRANCH_PATTERN = re.compile(r"[\w][\w./-]*")

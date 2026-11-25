@@ -381,3 +381,20 @@ def test_config_defaults_and_partial_sla_override(tmp_path) -> None:
     cfg = load_config(None, tmp_path)
     assert cfg.dashboard.scan_every_hours == 1
     assert cfg.dashboard.sla_hours == {"critical": 4, "high": 72, "medium": 168, "low": 720}
+
+
+def test_previous_window_is_the_equal_span_before_a_preset() -> None:
+    from driftpilot.report.dashboard.data import previous_window
+
+    runs = [run("2026-01-01T06:00:00Z"), run("2026-10-24T06:00:00Z")]
+    as_of = "2026-10-24T18:00:00Z"
+    assert previous_window({"from": "2026-09-24"}, runs, as_of) == {
+        "days": 30, "from": "2026-08-25", "to": "2026-09-23",
+    }  # fmt: skip
+    assert previous_window({"from": "2026-10-17", "team": "x"}, runs, as_of)["days"] == 7
+    assert previous_window({"from": "2026-07-26"}, runs, as_of)["days"] == 90
+    assert previous_window({"from": "2026-09-23"}, runs, as_of) is None  # not a preset
+    assert previous_window({"from": "2026-09-24", "to": "2026-10-10"}, runs, as_of) is None
+    assert previous_window({}, runs, as_of) is None
+    # the data must reach back over the whole previous window
+    assert previous_window({"from": "2026-09-24"}, [run("2026-09-01T00:00:00Z")], as_of) is None
