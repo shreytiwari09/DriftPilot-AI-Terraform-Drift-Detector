@@ -4,6 +4,7 @@ import FilterBar from './components/FilterBar';
 import Layout from './components/Layout';
 import { Empty, Icon } from './components/ui';
 import { computeKpis, episodeKey, filterEpisodes } from './lib/logic';
+import { periodLabel } from './lib/period';
 import { buildHash, useRoute, type Page } from './lib/route';
 import { useData } from './lib/useData';
 import About from './pages/About';
@@ -30,7 +31,7 @@ export default function App() {
   }, [data, route.page]);
 
   if (state.status === 'loading') {
-    return <div className="grid min-h-screen place-items-center" role="status"><div className="flex items-center gap-3 text-mute"><Icon name="refresh" className="h-5 w-5 animate-spin" /> Loading drift data…</div></div>;
+    return <div className="grid min-h-screen place-items-center" role="status"><p className="text-ink2">Loading drift data…</p></div>;
   }
   if (!data || !kpis) {
     return (
@@ -54,10 +55,10 @@ export default function App() {
 
   return (
     <>
-      <a href="#main" onClick={(ev) => { ev.preventDefault(); document.getElementById('main')?.focus(); }} className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-brand focus:px-3 focus:py-2 focus:text-white">Skip to content</a>
-      <Layout page={route.page} data={data} state={state} repoFilter={route.filters.repo} hrefFor={hrefFor}>
+      <a href="#main" onClick={(ev) => { ev.preventDefault(); document.getElementById('main')?.focus(); }} className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-lg focus:bg-ink focus:px-3 focus:py-2 focus:text-bg">Skip to content</a>
+      <Layout page={route.page} data={data} state={state} repoFilter={route.filters.repo} period={periodLabel(route.filters, data.asOf)} hrefFor={hrefFor}>
         <FilterBar data={data} filters={route.filters} matches={eps.length} onChange={setFilters} />
-        <div key={route.page} className="fade-up">
+        <div key={route.page}>
           <Page data={data} filters={route.filters} eps={eps} kpis={kpis} open={open} setFilters={setFilters} />
         </div>
       </Layout>
