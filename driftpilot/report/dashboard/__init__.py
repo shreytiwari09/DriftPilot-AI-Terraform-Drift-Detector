@@ -20,6 +20,7 @@ from driftpilot.history.analytics import AnalyticsReport
 from driftpilot.history.verdict_monitor import MonitorReport
 from driftpilot.models import AuditRecord, RunRecord
 from driftpilot.report.dashboard.data import build_data
+from driftpilot.report.metrics import build_metrics
 
 CHART_JS = "https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
 
@@ -41,10 +42,10 @@ def build_dashboard(
     note: str | None = None,
     publish_addresses: bool = True,
 ) -> dict[str, str]:
-    """The files to publish: `{"index.html": ..., "data.json": ...}`."""
+    """The files to publish: `index.html`, `data.json` and `metrics.prom`."""
     data = build_data(report, monitor, episodes, runs, title, note, publish_addresses)
     text = json.dumps(data, separators=(",", ":")) + "\n"
-    return {"index.html": render_page(data), "data.json": text}
+    return {"index.html": render_page(data), "data.json": text, "metrics.prom": build_metrics(data)}
 
 
 def _read_tree(folder: Traversable, prefix: str = "") -> dict[str, str]:
@@ -87,7 +88,8 @@ def build_site(
     scan_every_hours: float = 6,
     sla_hours: dict[str, float | None] | None = None,
 ) -> dict[str, str]:
-    """Every file to publish: the React app, `index.html` with data embedded, and `data.json`.
+    """Every file to publish: the React app, `index.html` with data embedded, `data.json` and
+    `metrics.prom`.
 
     Falls back to the older single-file page when the app was not built.
     """
@@ -99,4 +101,9 @@ def build_site(
         llm_call_limit, scan_every_hours, sla_hours,
     )  # fmt: skip
     text = json.dumps(data, separators=(",", ":")) + "\n"
-    return {**app, "index.html": render_app_page(app["index.html"], data), "data.json": text}
+    return {
+        **app,
+        "index.html": render_app_page(app["index.html"], data),
+        "data.json": text,
+        "metrics.prom": build_metrics(data),
+    }

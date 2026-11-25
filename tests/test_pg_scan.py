@@ -492,3 +492,15 @@ def test_the_llm_budget_applies_to_database_findings(tmp_path) -> None:
         or "unavailable" in result.verdicts[f.id].reason
     )
     assert [e.kind for e in result.guardrail_events] == ["budget-exceeded"]
+
+
+def test_db_scan_writes_sarif(tmp_path, replay) -> None:
+    expected, live = replay
+    out = tmp_path / "db.sarif"
+    args = ["db", "scan", "--dir", str(tmp_path), "--no-llm", "--expected-json", str(expected),
+            "--live-json", str(live), "--sarif", str(out)]  # fmt: skip
+    assert runner.invoke(app, args, env={"COLUMNS": "250"}).exit_code == 0
+    results = json.loads(out.read_text())["runs"][0]["results"]
+    assert len(results) >= 3
+    names = {r["locations"][0]["logicalLocations"][0]["fullyQualifiedName"] for r in results}
+    assert any(n.startswith("postgres.public.") for n in names)

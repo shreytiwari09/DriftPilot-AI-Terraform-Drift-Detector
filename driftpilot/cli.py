@@ -35,6 +35,10 @@ ConfigOption = Annotated[
     Path | None, typer.Option(help="Config file (default: <dir>/.driftpilot.yml).")
 ]
 LLMOption = Annotated[bool, typer.Option("--llm/--no-llm", help="Use the LLM for triage.")]
+SarifOption = Annotated[
+    Path | None,
+    typer.Option("--sarif", help="Also write the findings as a SARIF 2.1.0 file (code scanning)."),
+]
 
 
 @app.callback()
@@ -57,6 +61,21 @@ def _make_llm(config: Config, use_llm: bool) -> AuditingLLM | None:
     if use_llm and llm is None and config.llm.enabled:
         err_console.print("[dim]No LLM API key found: undecided findings stay 'needs triage'.[/]")
     return llm
+
+
+def _write_sarif(result: ScanResult, path: Path | None) -> None:
+    """Write the SARIF file when `--sarif` was given (a write error is reported, not fatal)."""
+    if path is None:
+        return
+    from driftpilot.report.sarif import sarif_text
+
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(sarif_text(result), encoding="utf-8")
+    except OSError as e:
+        err_console.print(f"[red]error:[/] could not write {path}: {e}")
+        raise typer.Exit(1) from e
+    err_console.print(f"[dim]SARIF written to {path}[/]")
 
 
 def _scan_or_exit(
@@ -101,6 +120,7 @@ def scan(
         Path | None,
         typer.Option(help="A CloudTrail event (as EventBridge delivers it): who changed what."),
     ] = None,
+    sarif: SarifOption = None,
 ) -> None:
     """Check a Terraform directory for drift and unmanaged resources."""
     cfg = _load(directory, config)
@@ -116,6 +136,7 @@ def scan(
         from driftpilot.history.store import LocalStore, append_scan
 
         append_scan(LocalStore(history), result)
+    _write_sarif(result, sarif)
     if json_output:
         print(result.model_dump_json(indent=2))
     else:
@@ -129,7 +150,9 @@ def report(
     history: Annotated[Path, typer.Option(help="History folder (drift-events.jsonl, runs.jsonl).")],
     html: Annotated[
         Path | None,
-        typer.Option(help="Also write the dashboard (index.html and data.json) to this folder."),
+        typer.Option(
+            help="Also write the dashboard (index.html, data.json, metrics.prom) to this folder."
+        ),
     ] = None,
     csv_file: Annotated[
         Path | None, typer.Option("--csv", help="Also write the drift episodes to a CSV file.")
@@ -178,7 +201,9 @@ def report(
             target = html / name
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(text, encoding="utf-8")
-        console.print(f"[green]Dashboard written to {html / 'index.html'} (and data.json)[/]")
+        console.print(
+            f"[green]Dashboard written to {html / 'index.html'} (and data.json, metrics.prom)[/]"
+        )
     if csv_file is not None:
         csv_file.parent.mkdir(parents=True, exist_ok=True)
         csv_file.write_text(episodes_csv(episode_records(episodes, publish_addresses)))
@@ -258,6 +283,7 @@ def db_scan(
     history: Annotated[
         Path | None, typer.Option(help="Append this scan to a local history folder.")
     ] = None,
+    sarif: SarifOption = None,
 ) -> None:
     """Compare the migration files with a live Postgres database (read-only).
 
@@ -272,6 +298,7 @@ def db_scan(
         from driftpilot.history.store import LocalStore, append_scan
 
         append_scan(LocalStore(history), result)
+    _write_sarif(result, sarif)
     if json_output:
         print(result.model_dump_json(indent=2))
     else:
