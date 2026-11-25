@@ -292,7 +292,8 @@ def _run_record(hour: int, errors: int = 0, repo="acme/infra", findings=1, worki
     from driftpilot.models import RunRecord
 
     return RunRecord(
-        run_id=f"r{hour}-{repo}", timestamp=datetime(2026, 10, 1, tzinfo=UTC) + timedelta(hours=hour),
+        run_id=f"r{hour}-{repo}",
+        timestamp=datetime(2026, 10, 1, tzinfo=UTC) + timedelta(hours=hour),
         working_dir=working_dir, finding_count=findings, critical_count=0, distinct_resources=1,
         unmanaged_count=0, noise_count=2, repo=repo, errors=errors,
     )  # fmt: skip

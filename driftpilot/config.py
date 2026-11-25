@@ -119,7 +119,7 @@ NotifyEvent = Literal["new_drift", "monitor_alert", "scan_failed"]
 
 
 class NotificationsConfig(BaseModel):
-    """Chat/webhook messages. Off unless the environment variable `webhook_env` holds an https URL."""
+    """Chat/webhook messages. Off unless the variable named in `webhook_env` holds an https URL."""
 
     webhook_env: str = "DRIFTPILOT_WEBHOOK_URL"  # the URL is a secret: it is read from here only
     format: Literal["slack", "teams", "generic"] = "slack"
